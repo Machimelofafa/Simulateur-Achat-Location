@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Simulateur Achat vs Location – Paris & proche banlieue (Thème clair, Ancien/Neuf)</title>
+  <style>
+    :root{
+      /* Light theme palette */
+      --bg:#f7f8fb;          /* page background */
+      --card:#ffffff;        /* card surface */
+      --card-2:#f1f3f8;      /* inputs bg */
+      --muted:#5e6a7b;       /* muted text */
+      --text:#0f172a;        /* main text (very dark) */
+      --accent:#2563eb;      /* blue */
+      --accent-2:#16a34a;    /* green */
+      --accent-3:#db2777;    /* pink */
+      --ring:rgba(37, 99, 235, .25);
+      --ok:#16a34a; --warn:#b45309; --bad:#dc2626;
+      --shadow:0 10px 30px rgba(16,24,40,.08), 0 2px 6px rgba(16,24,40,.06);
+      --radius:16px;
+      --border:1px solid rgba(15,23,42,.08);
+      --grid:rgba(15,23,42,.035);    /* lighter grid */
+      --axis:rgba(15,23,42,.55);
+      --legend-bg:rgba(255,255,255,.96);
+      --legend-border:rgba(15,23,42,.12);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0; background:linear-gradient(180deg, var(--bg) 0%, #ffffff 60%); color:var(--text); font:15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Apple Color Emoji","Segoe UI Emoji"}
+    .wrap{max-width:1280px;margin:24px auto;padding:0 16px 140px}
+    header{display:flex;gap:16px;align-items:center;justify-content:space-between;margin-bottom:18px}
+    .title{font-size:clamp(20px,3vw,28px);font-weight:750;letter-spacing:.2px}
+    .subtitle{color:var(--muted);font-size:14px}
+    .grid{display:grid;grid-template-columns:360px 1fr;gap:16px}
+    @media (max-width: 980px){.grid{grid-template-columns:1fr}}
+    .card{background:var(--card);border:var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
+    .card h3{margin:0 0 12px;font-size:15px;letter-spacing:.3px}
+    .pane{padding:16px}
+    .section{padding:16px;border-top:1px dashed rgba(15,23,42,.08)}
+    .section:first-child{border-top:none}
+
+    .input{display:grid;grid-template-columns:1fr 190px;gap:10px;align-items:center;margin:10px 0}
+    .input input[type="number"],.input input[type="text"],.input select{width:100%;background:var(--card-2);color:var(--text);border:var(--border);border-radius:10px;padding:10px 12px;outline:none}
+    .input input:focus,.input select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--ring)}
+    .muted{color:var(--muted)}
+
+    .row{display:flex;gap:10px;flex-wrap:wrap}
+    .chip{background:#eef2ff;border:1px solid rgba(37,99,235,.25);padding:6px 10px;border-radius:999px;font-size:12px;color:#1e40af}
+    .btn{appearance:none;border:none;color:#fff;background:var(--accent);padding:10px 14px;border-radius:12px;font-weight:700;cursor:pointer}
+    .btn.secondary{background:transparent;border:1px solid var(--accent);color:var(--accent)}
+    .btn.ghost{background:transparent;border:var(--border);color:var(--text)}
+    .btn:focus{outline:none;box-shadow:0 0 0 3px var(--ring)}
+    .btn + .btn{margin-left:8px}
+
+    .keymetrics{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+    @media (max-width: 980px){.keymetrics{grid-template-columns:1fr 1fr}}
+    .metric{background:var(--card);border:var(--border);border-radius:14px;padding:14px}
+    .metric .k{font-weight:800;font-size:18px;margin-bottom:2px}
+    .metric .l{font-size:12px;color:var(--muted)}
+
+    .canvas-card{padding:16px;border-radius:var(--radius);background:var(--card);border:var(--border)}
+
+    .table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+    .table th,.table td{border-bottom:1px dashed rgba(15,23,42,.1);padding:10px;text-align:right}
+    .table th:first-child,.table td:first-child{text-align:left}
+    .note{font-size:12px;color:var(--muted)}
+
+    .tag-ok{color:var(--ok)} .tag-warn{color:var(--warn)} .tag-bad{color:var(--bad)}
+
+    .switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+    .switch input{appearance:none;width:38px;height:22px;background:rgba(15,23,42,.08);border-radius:999px;position:relative;outline:none;border:1px solid rgba(15,23,42,.12)}
+    .switch input:checked{background:rgba(22,163,74,.18);border-color:#22c55e}
+    .switch input::after{content:"";width:18px;height:18px;background:#fff;border-radius:50%;position:absolute;top:1px;left:1px;transition:all .2s;border:1px solid rgba(15,23,42,.15)}
+    .switch input:checked::after{left:calc(100% - 19px)}
+
+    .hr{height:1px;background:linear-gradient(90deg,transparent,rgba(15,23,42,.1),transparent);margin:10px 0}
+    .pill{font-size:11px;padding:4px 8px;border-radius:999px;border:1px solid rgba(15,23,42,.12);color:var(--muted)}
+
+    .capex{border:1px dashed rgba(15,23,42,.12);padding:10px;border-radius:12px;max-width:100%;overflow:auto}
+    .capex-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:8px;align-items:center;margin:6px 0}
+    .capex-row input{min-width:0}
+    .capex-row .del{background:transparent;border:1px solid rgba(15,23,42,.2);color:var(--text);border-radius:10px;padding:8px 10px;cursor:pointer}
+
+    .split{display:grid;grid-template-columns:1fr;gap:12px}
+
+    .test-ok{color:var(--ok)} .test-bad{color:var(--bad)}
+    details summary{cursor:pointer}
+    pre{white-space:pre-wrap;background:var(--card-2);padding:10px;border-radius:10px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <div class="title">Simulateur Achat vs Location – Paris / Proche banlieue</div>
+        <div class="subtitle">Thème clair permanent. Sélecteur <b>Ancien/Neuf</b> en tête. L'UI et les hypothèses s'adaptent automatiquement (frais, charges, etc.).</div>
+      </div>
+      <div class="row">
+        <button id="btnReset" class="btn ghost" title="Réinitialiser">Réinitialiser</button>
+        <button id="btnExport" class="btn secondary" title="Exporter CSV">Exporter CSV</button>
+      </div>
+    </header>
+
+    <div class="grid">
+      <!-- LEFT: Inputs -->
+      <div class="card">
+        <div class="pane">
+          <h3>Hypothèses générales</h3>
+          <div class="input"><label>Type de bien</label>
+            <select id="scenario">
+              <option value="ancien" selected>Ancien</option>
+              <option value="neuf">Neuf</option>
+            </select>
+          </div>
+          <div class="input"><label>Horizon (années)</label><input id="years" type="number" min="1" max="40" step="1" value="10"></div>
+          <div class="input"><label>Scénario de prix logement (%/an)</label>
+            <select id="priceGrowth">
+              <option value="-0.015">Baissier (−1,5 %/an)</option>
+              <option value="0" selected>Neutre (0 %/an)</option>
+              <option value="0.015">Haussier (+1,5 %/an)</option>
+              <option value="custom">Personnalisé…</option>
+            </select>
+          </div>
+          <div class="input" id="customGrowthRow" style="display:none"><label>Prix: croissance personnalisée (%/an)</label><input id="customGrowth" type="number" step="0.1" value="0.8"></div>
+          <div class="input"><label>Coût d'opportunité (%/an)</label><input id="altReturn" type="number" step="0.1" value="3"></div>
+          <div class="row">
+            <label class="switch"><input id="toggleOpp" type="checkbox" checked> Inclure coût d'opportunité</label>
+          </div>
+          <div class="row" style="gap:16px">
+            <label class="switch" title="Si vous restez locataire, l'apport initial est placé au même taux."><input id="optRentInvestDown" type="checkbox"> Si location : investir l'apport</label>
+            <label class="switch" title="Si loyer < (mensualité + charges proprio mensuelles), le surplus mensuel est placé au même taux."><input id="optRentInvestDiff" type="checkbox"> Si location : investir le surplus mensuel</label>
+          </div>
+          <details style="margin-top:8px">
+            <summary>ℹ️ Aide : comment est calculé le coût d'opportunité ?</summary>
+            <div class="note">Par défaut, on ajoute au scénario <b>propriétaire</b> le rendement composé que vous auriez obtenu sur l'<b>apport</b> et les <b>capex</b> s'ils avaient été placés au taux ci-dessus. Si vous cochez les options ci-dessus, on bascule une partie de cet effet côté <b>locataire</b> : l'apport (et/ou le surplus mensuel) est investi, et on évite le double-comptage en retirant l'effet correspondant du côté propriétaire.</div>
+          </details>
+        </div>
+
+        <!-- BIEN CIBLÉ: ANCIEN -->
+        <div id="sectAncien" class="section">
+          <h3>Bien ciblé – Ancien</h3>
+          <div class="input"><label>Quartier / Commune</label>
+            <select id="ancArea">
+              <optgroup label="Paris intra-muros">
+                <option value="paris11">Paris 11e</option>
+                <option value="paris12">Paris 12e</option>
+                <option value="paris15">Paris 15e</option>
+                <option value="paris10">Paris 10e</option>
+                <option value="paris13">Paris 13e</option>
+                <option value="paris14">Paris 14e</option>
+                <option value="paris17">Paris 17e</option>
+                <option value="paris18">Paris 18e</option>
+                <option value="paris19">Paris 19e</option>
+                <option value="paris20">Paris 20e</option>
+              </optgroup>
+              <optgroup label="Proche banlieue">
+                <option value="boulogne">Boulogne-Billancourt</option>
+                <option value="issy">Issy-les-Moulineaux</option>
+                <option value="levallois">Levallois-Perret</option>
+                <option value="neuilly">Neuilly-sur-Seine</option>
+                <option value="asnieres">Asnières-sur-Seine</option>
+                <option value="clichy">Clichy</option>
+                <option value="courbevoie">Courbevoie</option>
+                <option value="suresnes">Suresnes</option>
+                <option value="montreuil">Montreuil</option>
+                <option value="pantin">Pantin</option>
+                <option value="bagnolet">Bagnolet</option>
+                <option value="vincennes">Vincennes</option>
+                <option value="stmande">Saint-Mandé</option>
+                <option value="charenton">Charenton-le-Pont</option>
+                <option value="stouen">Saint-Ouen</option>
+              </optgroup>
+            </select>
+          </div>
+          <div class="input"><label>Surface (m²)</label><input id="surface" type="number" step="1" value="65"></div>
+          <div class="input"><label>Prix au m² (€)</label><input id="pricePerM2" type="number" step="10" value="9630"></div>
+          <div class="row">
+            <button id="btnRestoreAnc" class="btn ghost" title="Rétablir le prix/m² depuis le preset quartier">Restaurer valeurs quartier (Ancien)</button>
+            <span class="pill">Résidence principale (PV exonérée)</span>
+          </div>
+        </div>
+
+        <!-- BIEN CIBLÉ: NEUF (même liste de quartiers) -->
+        <div id="sectNeuf" class="section" style="display:none">
+          <h3>Bien ciblé – Neuf</h3>
+          <div class="input"><label>Quartier / Commune</label>
+            <select id="neufArea">
+              <optgroup label="Paris intra-muros">
+                <option value="paris11n">Paris 11e</option>
+                <option value="paris12n">Paris 12e</option>
+                <option value="paris15n">Paris 15e</option>
+                <option value="paris10n">Paris 10e</option>
+                <option value="paris13n">Paris 13e</option>
+                <option value="paris14n">Paris 14e</option>
+                <option value="paris17n">Paris 17e</option>
+                <option value="paris18n">Paris 18e</option>
+                <option value="paris19n">Paris 19e</option>
+                <option value="paris20n">Paris 20e</option>
+              </optgroup>
+              <optgroup label="Proche banlieue">
+                <option value="boulognen">Boulogne-Billancourt</option>
+                <option value="issyn">Issy-les-Moulineaux</option>
+                <option value="levalloisn">Levallois-Perret</option>
+                <option value="neuillyn">Neuilly-sur-Seine</option>
+                <option value="asnieresn">Asnières-sur-Seine</option>
+                <option value="clichyn">Clichy</option>
+                <option value="courbevoien">Courbevoie</option>
+                <option value="suresnesn">Suresnes</option>
+                <option value="montreuiln">Montreuil</option>
+                <option value="pantinn">Pantin</option>
+                <option value="bagnoletn">Bagnolet</option>
+                <option value="vincennesn">Vincennes</option>
+                <option value="stmanden">Saint-Mandé</option>
+                <option value="charentonn">Charenton-le-Pont</option>
+                <option value="stouenn">Saint-Ouen</option>
+              </optgroup>
+            </select>
+          </div>
+          <div class="input"><label>Surface (m²)</label><input id="surfaceNeuf" type="number" step="1" value="65"></div>
+          <div class="input"><label>Prix au m² (€)</label><input id="pricePerM2Neuf" type="number" step="10" value="10500"></div>
+          <div class="row">
+            <button id="btnRestoreNeuf" class="btn ghost" title="Appliquer le preset (prix, charges, entretien, TF)">Restaurer valeurs quartier (Neuf)</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <h3>Financement & frais</h3>
+          <div class="input"><label>Apport (€)</label><input id="downPayment" type="number" step="1000" value="143000"></div>
+          <div class="input"><label>Taux fixe (%/an)</label><input id="rate" type="number" step="0.01" value="3.18"></div>
+          <div class="input"><label>Durée crédit (ans)</label><input id="term" type="number" step="1" value="25"></div>
+          <div class="input"><label>Frais d'acquisition (% prix)</label><input id="notary" type="number" step="0.1" value="7.5"></div>
+          <div class="input"><label>Frais de revente (% du prix de vente)</label><input id="sellFee" type="number" step="0.1" value="5"></div>
+          <div id="ptzBox" style="display:none">
+            <div class="hr"></div>
+            <h3>Aides (neuf) – optionnel</h3>
+            <div class="input"><label>PTZ (montant €)</label><input id="ptzAmount" type="number" step="1000" value="0"></div>
+            <div class="input"><label>PTZ durée (ans)</label><input id="ptzTerm" type="number" step="1" value="20"></div>
+          </div>
+          <div class="hr"></div>
+          <h3>Profil emprunteur</h3>
+          <div class="input"><label>Revenu net mensuel foyer (€)</label><input id="incomeNet" type="number" step="10" value="7150"></div>
+          <div class="input"><label>Autres mensualités crédits (€)</label><input id="otherDebt" type="number" step="10" value="0"></div>
+        </div>
+
+        <div class="section">
+          <h3>Coûts récurrents propriétaire</h3>
+          <div class="input"><label>Charges copro (€/m²/an)</label><input id="coproPerM2" type="number" step="0.1" value="43.34"></div>
+          <div class="input"><label>Entretien (% du prix/an)</label><input id="maintPct" type="number" step="0.1" value="0.5"></div>
+          <div class="input"><label>Taxe foncière (€/an)</label><input id="tf" type="number" step="50" value="1300"></div>
+          <div class="input"><label>Assurance habitation (€/an)</label><input id="mrh" type="number" step="10" value="200"></div>
+          <div class="input" id="tfExemptRow" style="display:none"><label>Exonération TF (années)</label><input id="tfExempt" type="number" min="0" step="1" value="0"></div>
+        </div>
+
+        <div class="section">
+          <h3>Travaux extraordinaires (capex)</h3>
+          <div class="note">Ajoutez des postes ponctuels (cuisine, SDB, fenêtres, ravalement, etc.). Seule la liste du scénario <b>actif</b> est visible.</div>
+          <div class="split">
+            <div id="wrapCapexAnc">
+              <div class="row" style="justify-content:space-between;align-items:center"><b id="lblCapexAnc">Ancien (actif)</b><button id="addCapexAnc" class="btn ghost">+ Ajouter une ligne</button></div>
+              <div id="capexAnc" class="capex"></div>
+            </div>
+            <div id="wrapCapexNeuf" style="display:none">
+              <div class="row" style="justify-content:space-between;align-items:center"><b id="lblCapexNeuf">Neuf (inactif)</b><button id="addCapexNeuf" class="btn ghost">+ Ajouter une ligne</button></div>
+              <div id="capexNeuf" class="capex"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h3>Chemin locatif</h3>
+          <div class="input"><label>Loyer actuel (€/mois)</label><input id="rentSmall" type="number" step="10" value="1690"></div>
+          <div class="input"><label>Années restantes dans l'actuel (ans)</label><input id="rentSmallYears" type="number" min="0" max="40" step="1" value="2"></div>
+          <div class="input"><label>Nouveau loyer (€/mois)</label><input id="rentBig" type="number" step="10" value="2000"></div>
+          <div class="input"><label>IRL / Indexation loyers (%/an)</label><input id="irl" type="number" step="0.1" value="1.2"></div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Results -->
+      <div class="card">
+        <div class="pane">
+          <h3>Résultats & synthèse</h3>
+          <div class="keymetrics">
+            <div class="metric"><div class="k" id="kMonthly">—</div><div class="l">Mensualité crédit</div></div>
+            <div class="metric"><div class="k" id="kDTI">—</div><div class="l">Taux d'endettement (total)</div></div>
+            <div class="metric"><div class="k" id="kOwner10">—</div><div class="l">Coût propriétaire (horizon)</div></div>
+            <div class="metric"><div class="k" id="kRenter10">—</div><div class="l">Coût locataire (horizon)</div></div>
+            <div class="metric"><div class="k" id="kDelta">—</div><div class="l">Écart Achat − Location</div></div>
+          </div>
+          <div class="hr"></div>
+          <div class="row">
+            <span id="tagGrowth" class="chip">Scénario prix: 0,0 %/an</span>
+            <span id="tagOpp" class="chip">Avec coût d'opportunité</span>
+            <span id="tagBE" class="chip">Break-even: —</span>
+            <span id="tagScenario" class="chip">Ancien</span>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="canvas-card">
+            <canvas id="chart" width="900" height="360" aria-label="Courbes cumulées achat vs location"></canvas>
+          </div>
+          <div class="note">Courbes des coûts cumulés par année avec graduations annuelles. Si les options d'opportunité sont cochées, la courbe locataire est réduite du capital placé (apport/surplus) et la courbe propriétaire inclut le manque à gagner sur l'apport/capex non placés.</div>
+        </div>
+
+        <div class="section">
+          <h3>Détails (horizon)</h3>
+          <table class="table" id="tblDetails"></table>
+        </div>
+
+        <div class="section">
+          <h3>Tableau annuel</h3>
+          <table class="table" id="tblYears"></table>
+        </div>
+
+        <div class="section">
+          <h3>Tests intégrés (débogage)</h3>
+          <div class="row"><button id="btnTests" class="btn ghost">Lancer les tests</button><span id="testStatus" class="muted"></span></div>
+          <details style="margin-top:8px">
+            <summary>Voir le log des tests</summary>
+            <pre id="testLog"></pre>
+          </details>
+          <details style="margin-top:8px">
+            <summary>Trace erreurs</summary>
+            <pre id="err"></pre>
+          </details>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Formatting
+    const fmtEUR = new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0});
+    const fmtPCT = new Intl.NumberFormat('fr-FR',{style:'percent',minimumFractionDigits:0,maximumFractionDigits:1});
+
+    // === Presets quartiers (Ancien) – valeurs indicatives ===
+    const ANCIEN_PRESETS = {
+      // Paris
+      paris11:{label:'Paris 11e',ppm2:9839}, paris12:{label:'Paris 12e',ppm2:8954}, paris15:{label:'Paris 15e',ppm2:9721},
+      paris10:{label:'Paris 10e',ppm2:8800}, paris13:{label:'Paris 13e',ppm2:8850}, paris14:{label:'Paris 14e',ppm2:9500},
+      paris17:{label:'Paris 17e',ppm2:9900}, paris18:{label:'Paris 18e',ppm2:8500}, paris19:{label:'Paris 19e',ppm2:7800}, paris20:{label:'Paris 20e',ppm2:7700},
+      // Petite couronne Ouest / Sud
+      boulogne:{label:'Boulogne-Billancourt',ppm2:8276}, issy:{label:'Issy-les-Moulineaux',ppm2:7798}, levallois:{label:'Levallois-Perret',ppm2:9400},
+      neuilly:{label:'Neuilly-sur-Seine',ppm2:11800}, asnieres:{label:'Asnières-sur-Seine',ppm2:7200}, clichy:{label:'Clichy',ppm2:7000},
+      courbevoie:{label:'Courbevoie',ppm2:8200}, suresnes:{label:'Suresnes',ppm2:7900},
+      // Est
+      montreuil:{label:'Montreuil',ppm2:6578}, pantin:{label:'Pantin',ppm2:6500}, bagnolet:{label:'Bagnolet',ppm2:6200},
+      vincennes:{label:'Vincennes',ppm2:9600}, stmande:{label:'Saint-Mandé',ppm2:9500}, charenton:{label:'Charenton-le-Pont',ppm2:9200},
+      stouen:{label:'Saint-Ouen',ppm2:6193}
+    };
+
+    // === Presets quartiers (Neuf) – prix & charges indicatives ===
+    const NEUF_PRESETS = {
+      paris11n:{label:'Paris 11e (neuf)', ppm2:10800, coproPerM2:35, maintPct:0.30, tf:1200},
+      paris12n:{label:'Paris 12e (neuf)', ppm2:9800,  coproPerM2:35, maintPct:0.30, tf:1200},
+      paris15n:{label:'Paris 15e (neuf)', ppm2:11500, coproPerM2:38, maintPct:0.30, tf:1300},
+      paris10n:{label:'Paris 10e (neuf)', ppm2:9600,  coproPerM2:35, maintPct:0.30, tf:1200},
+      paris13n:{label:'Paris 13e (neuf)', ppm2:10500, coproPerM2:36, maintPct:0.30, tf:1200},
+      paris14n:{label:'Paris 14e (neuf)', ppm2:10600, coproPerM2:36, maintPct:0.30, tf:1250},
+      paris17n:{label:'Paris 17e (neuf)', ppm2:12000, coproPerM2:38, maintPct:0.30, tf:1350},
+      paris18n:{label:'Paris 18e (neuf)', ppm2:9300,  coproPerM2:34, maintPct:0.28, tf:1150},
+      paris19n:{label:'Paris 19e (neuf)', ppm2:8600,  coproPerM2:34, maintPct:0.28, tf:1100},
+      paris20n:{label:'Paris 20e (neuf)', ppm2:8500,  coproPerM2:34, maintPct:0.28, tf:1100},
+      boulognen:{label:'Boulogne (neuf)', ppm2:9800, coproPerM2:34, maintPct:0.25, tf:1150},
+      issyn:{label:'Issy (neuf)', ppm2:9300, coproPerM2:34, maintPct:0.25, tf:1100},
+      levalloisn:{label:'Levallois (neuf)', ppm2:10500, coproPerM2:36, maintPct:0.28, tf:1200},
+      neuillyn:{label:'Neuilly (neuf)', ppm2:12900, coproPerM2:36, maintPct:0.28, tf:1450},
+      asnieresn:{label:'Asnières (neuf)', ppm2:8000, coproPerM2:32, maintPct:0.28, tf:1050},
+      clichyn:{label:'Clichy (neuf)', ppm2:7850, coproPerM2:32, maintPct:0.28, tf:1050},
+      courbevoien:{label:'Courbevoie (neuf)', ppm2:9000, coproPerM2:33, maintPct:0.28, tf:1100},
+      suresnesn:{label:'Suresnes (neuf)', ppm2:8700, coproPerM2:33, maintPct:0.28, tf:1080},
+      montreuiln:{label:'Montreuil (neuf)', ppm2:7300, coproPerM2:31, maintPct:0.26, tf:1000},
+      pantinn:{label:'Pantin (neuf)', ppm2:7200, coproPerM2:31, maintPct:0.26, tf:980},
+      bagnoletn:{label:'Bagnolet (neuf)', ppm2:6900, coproPerM2:31, maintPct:0.26, tf:950},
+      vincennesn:{label:'Vincennes (neuf)', ppm2:10800, coproPerM2:34, maintPct:0.28, tf:1200},
+      stmanden:{label:'Saint-Mandé (neuf)', ppm2:10600, coproPerM2:34, maintPct:0.28, tf:1180},
+      charentonn:{label:'Charenton (neuf)', ppm2:9900, coproPerM2:34, maintPct:0.28, tf:1150},
+      stouenn:{label:'Saint-Ouen (neuf)', ppm2:8500, coproPerM2:32, maintPct:0.28, tf:1050}
+    };
+
+    // Helpers numériques
+    function pmic(rate){return rate/100/12}
+    function pmt(principal, annualRatePct, years){const r=pmic(annualRatePct),n=years*12;return r===0?principal/n:principal*(r*Math.pow(1+r,n))/(Math.pow(1+r,n)-1)}
+    function amortSchedule(principal, annualRatePct, years){
+      const r = pmic(annualRatePct); const n = Math.max(0, years*12|0); const M = n>0 ? pmt(principal, annualRatePct, years) : 0; let bal=principal; const rows=[];
+      for(let m=1;m<=n;m++){const interest=bal*r;const princ=M-interest;bal=Math.max(0,bal-princ);rows.push({month:m,pay:M,interest,principal:princ,balance:bal})} return rows;
+    }
+    const sum=a=>a.reduce((x,y)=>x+y,0);
+
+    function compute(params){
+      const {years,g,altReturn,includeOpp,surface,pricePerM2,down,rate,term,notaryPct,sellFeePct,coproPerM2,maintPct,tf,tfExemptYears=0,mrh,rentSmall,rentSmallYears,rentBig,irl,capexEvents=[],ptzAmount=0,ptzTerm=20,rentInvestDown=false,rentInvestDiff=false}=params;
+      const price=surface*pricePerM2; const totalCost=price*(1+notaryPct);
+      const loanMain=Math.max(0,totalCost-down-ptzAmount); const schedMain=amortSchedule(loanMain,rate,term);
+      const schedPTZ=ptzAmount>0?amortSchedule(ptzAmount,0,ptzTerm):[];
+      const monthly=(schedMain[0]?schedMain[0].pay:0)+(schedPTZ[0]?schedPTZ[0].pay:0);
+      const copro=coproPerM2*surface; const maintenance=maintPct*price;
+      // recurring per year (TF exonéré X années)
+      const recYear=y=>copro+maintenance+mrh+((y<=tfExemptYears)?0:tf);
+      const recCum=[]; let rc=0; for(let y=1;y<=years;y++){rc+=recYear(y); recCum.push(rc)}
+
+      function cumPaid(y){
+        const upto=Math.min(y*12,schedMain.length); const s1=schedMain.slice(0,upto);
+        const p1=sum(s1.map(r=>r.principal)), i1=sum(s1.map(r=>r.interest)), pay1=sum(s1.map(r=>r.pay)); const bal1=upto?s1[upto-1].balance:loanMain;
+        const upto2=Math.min(y*12,schedPTZ.length); const s2=schedPTZ.slice(0,upto2);
+        const p2=sum(s2.map(r=>r.principal)), pay2=sum(s2.map(r=>r.pay)); const bal2=upto2?s2[upto2-1].balance:(ptzAmount>0?ptzAmount:0)-(p2||0);
+        return {totalPaid:pay1+pay2,totalInterest:i1,totalPrincipal:p1+p2,remaining:(bal1||0)+(bal2||0)};
+      }
+
+      const rentYears=[]; for(let y=1;y<=years;y++){const base=(y<=rentSmallYears)?rentSmall*12:rentBig*12;rentYears.push(base*Math.pow(1+irl,y-1))}
+      const rentCum=[]; rentYears.reduce((acc,cur)=>{const v=acc+cur;rentCum.push(v);return v;},0);
+
+      function capexUpTo(y){return capexEvents.filter(e=>e.year>=1&&e.year<=y).reduce((t,e)=>t+Math.max(0,+e.cost||0),0)}
+      function oppOnCapexTo(y){return capexEvents.filter(e=>e.year>=1&&e.year<=y).reduce((t,e)=>{const k=y-e.year;return t+Math.max(0,+e.cost||0)*(Math.pow(1+altReturn,Math.max(0,k))-1);},0)}
+
+      // --- Opportunity on owner side (apport/capex) ---
+      const ownerCum=[],ownerCumWithOpp=[];
+      for(let y=1;y<=years;y++){
+        const {totalPaid,remaining}=cumPaid(y);
+        const salePrice=price*Math.pow(1+g,y); const saleCosts=salePrice*sellFeePct; const netSale=salePrice-saleCosts-remaining;
+        const baseOwnerCashOut=down+totalPaid+recCum[y-1]-netSale; const extraCapex=capexUpTo(y);
+        const foregoneDown=(includeOpp && !rentInvestDown)? down*(Math.pow(1+altReturn,y)-1) : 0; // if rentInvestDown, we don't count it here
+        const foregoneCapex=(includeOpp)? oppOnCapexTo(y):0;
+        ownerCum.push(baseOwnerCashOut+extraCapex);
+        ownerCumWithOpp.push(baseOwnerCashOut+extraCapex+foregoneDown+foregoneCapex);
+      }
+
+      const last=cumPaid(years); const salePriceH=price*Math.pow(1+g,years); const saleCostsH=salePriceH*sellFeePct; const netSaleH=salePriceH-saleCostsH-last.remaining;
+      const baseOwnerH=down+last.totalPaid+recCum[years-1]-netSaleH; const capexH=capexUpTo(years);
+      const foregoneDownH=(includeOpp && !rentInvestDown)? down*(Math.pow(1+altReturn,years)-1):0; const foregoneCapexH=(includeOpp)? oppOnCapexTo(years):0;
+      const ownerCashH=baseOwnerH+capexH; const ownerCashHOpp=ownerCashH+foregoneDownH+foregoneCapexH;
+
+      // --- Renter-side investing options (apport / monthly surplus) ---
+      const rentCumAdj=[...rentCum];
+      let renterFVDownByYear = new Array(years).fill(0);
+      if(includeOpp && rentInvestDown){ for(let y=1;y<=years;y++){ renterFVDownByYear[y-1]= down*(Math.pow(1+altReturn,y)-1); } }
+
+      let renterFVSurplusByYear = new Array(years).fill(0);
+      if(includeOpp && rentInvestDiff){
+        const rm = altReturn/12; const months = years*12; const sMonthly = new Array(months).fill(0);
+        for(let m=1;m<=months;m++){
+          const y = Math.floor((m-1)/12)+1; // year index starting at 1
+          const rentM = ((y<=rentSmallYears?rentSmall:rentBig)*Math.pow(1+irl,y-1));
+          const ownerM = monthly + recYear(y)/12; // monthly owner cash cost approximation
+          const surplus = Math.max(0, ownerM - rentM);
+          sMonthly[m-1] = surplus;
+        }
+        // For each year y, compute FV at year-end of all deposits up to that month
+        for(let y=1;y<=years;y++){
+          const endM = y*12; let FV = 0; for(let m=1;m<=endM;m++){ FV += sMonthly[m-1]*Math.pow(1+rm, endM - m); } renterFVSurplusByYear[y-1]=FV; }
+      }
+
+      // Adjust rent curve if options active
+      const rentCumFinal = rentCum.map((v,idx)=> v - (renterFVDownByYear[idx]||0) - (renterFVSurplusByYear[idx]||0));
+
+      const renterCashH=sum(rentYears); const renterBenefitDown = renterFVDownByYear[years-1]||0; const renterBenefitSurp = renterFVSurplusByYear[years-1]||0;
+      let beYear=null; const ownerSeriesUse=includeOpp?ownerCumWithOpp:ownerCum; const rentSeriesUse=(includeOpp?rentCumFinal:rentCum); for(let i=0;i<years;i++){ if(ownerSeriesUse[i]<=rentSeriesUse[i]){ beYear=i+1; break; } }
+
+      return{series:{rentCum,ownerCum,ownerCumWithOpp,rentCumAdj:rentCumFinal},horizon:{monthly,ownerCashH,ownerCashHOpp,renterCashH,totalInterest:last.totalInterest,totalPrincipal:last.totalPrincipal,remaining:last.remaining,netSaleH,beYear,capexH,foregoneDownH,foregoneCapexH,renterBenefitDown,renterBenefitSurp,ptzPayMonthly:(schedPTZ[0]?schedPTZ[0].pay:0)},derived:{price,totalCost,loan:loanMain+ptzAmount,recurringY1:recYear(1)}};
+    }
+
+    const el=id=>document.getElementById(id);
+    function readCapex(containerId){const box=el(containerId);const rows=box.querySelectorAll('.capex-row');const out=[];rows.forEach(r=>{const y=+r.querySelector('.capex-year').value;const c=+r.querySelector('.capex-cost').value;if(y>0&&c>0)out.push({year:y,cost:c});});return out}
+
+    function readInputs(){
+      const years=+el('years').value; const growthSel=el('priceGrowth').value; let g=0; g=(growthSel==='custom')?(+el('customGrowth').value)/100:+growthSel; const includeOpp=el('toggleOpp').checked; const altReturn=+el('altReturn').value/100; const scenario=el('scenario').value; 
+      const surface=(scenario==='neuf')? +el('surfaceNeuf').value : +el('surface').value; const pricePerM2=(scenario==='neuf')? +el('pricePerM2Neuf').value : +el('pricePerM2').value;
+      const down=+el('downPayment').value; const rate=+el('rate').value; const term=+el('term').value; const notaryPct=+el('notary').value/100; const sellFeePct=+el('sellFee').value/100; const coproPerM2=+el('coproPerM2').value; const maintPct=+el('maintPct').value/100; const tf=+el('tf').value; const mrh=+el('mrh').value; const tfExemptYears=(scenario==='neuf')? +el('tfExempt').value : 0; const rentSmall=+el('rentSmall').value; const rentSmallYears=+el('rentSmallYears').value; const rentBig=+el('rentBig').value; const irl=+el('irl').value/100; const incomeNet=+el('incomeNet').value; const otherDebt=+el('otherDebt').value; const ptzAmount=(scenario==='neuf')? +el('ptzAmount').value:0; const ptzTerm=(scenario==='neuf')? +el('ptzTerm').value:20; const capexAnc=readCapex('capexAnc'); const capexNeuf=readCapex('capexNeuf'); const capexEvents=(scenario==='neuf')?capexNeuf:capexAnc; const rentInvestDown=el('optRentInvestDown').checked; const rentInvestDiff=el('optRentInvestDiff').checked; return{years,g,altReturn,includeOpp,surface,pricePerM2,down,rate,term,notaryPct,sellFeePct,coproPerM2,maintPct,tf,tfExemptYears,mrh,rentSmall,rentSmallYears,rentBig,irl,incomeNet,otherDebt,scenario,capexEvents,ptzAmount,ptzTerm,rentInvestDown,rentInvestDiff}
+    }
+
+    function model(){
+      try{
+        const p=readInputs(); const out=compute(p);
+        el('kMonthly').textContent=fmtEUR.format(out.horizon.monthly);
+        const ownerDisplay=p.includeOpp?out.horizon.ownerCashHOpp:out.horizon.ownerCashH;
+        el('kOwner10').textContent=fmtEUR.format(ownerDisplay);
+        const renterDisplay=p.includeOpp? (out.series.rentCumAdj[out.series.rentCumAdj.length-1]) : out.horizon.renterCashH;
+        el('kRenter10').textContent=fmtEUR.format(renterDisplay);
+        const delta=ownerDisplay-renterDisplay; const kDelta=el('kDelta'); kDelta.textContent=(delta>=0?'+':'')+fmtEUR.format(delta); kDelta.style.color=delta<0?'var(--ok)':'var(--bad)';
+        let dtiTxt='—',dtiClass=''; if(p.incomeNet>0){const dti=(out.horizon.monthly+p.otherDebt)/p.incomeNet; dtiTxt=fmtPCT.format(dti); if(dti<=0.35)dtiClass='tag-ok'; else if(dti<=0.4)dtiClass='tag-warn'; else dtiClass='tag-bad';} const kDTI=el('kDTI'); kDTI.textContent=dtiTxt; kDTI.className='k '+dtiClass;
+        const growthPct=(readInputs().g*100).toFixed(1).replace('.',','); el('tagGrowth').textContent=`Scénario prix: ${growthPct} %/an`; el('tagOpp').textContent=p.includeOpp?'Avec coût d\'opportunité':'Sans coût d\'opportunité'; el('tagBE').textContent=`Break-even: ${out.horizon.beYear?('année '+out.horizon.beYear):'—'}`; el('tagScenario').textContent=(p.scenario==='neuf')?'Neuf':'Ancien';
+        const d=out.derived,h=out.horizon; const details=[["Prix d\'achat",fmtEUR.format(d.price)],["Frais d\'acquisition",fmtEUR.format(d.price*(readInputs().notaryPct))],["Coût total (prix+frais)",fmtEUR.format(d.totalCost)],["Apport",fmtEUR.format(readInputs().down)],["Emprunt (total)",fmtEUR.format(d.loan)],["Mensualité PTZ (si >0)",fmtEUR.format(h.ptzPayMonthly)],["Intérêts payés (horizon)",fmtEUR.format(h.totalInterest)],["Capital remboursé (horizon)",fmtEUR.format(h.totalPrincipal)],["Solde restant dû (horizon)",fmtEUR.format(h.remaining)],["Coûts récurrents/an Y1 (copro+entretien+TF+MRH)",fmtEUR.format(d.recurringY1)],["Produit net de vente (horizon)",fmtEUR.format(h.netSaleH)],["Travaux extraordinaires (cumul horizon)",fmtEUR.format(h.capexH)]];
+        if(p.includeOpp){ if(p.rentInvestDown) details.push(["Bénéfice locataire – apport placé", fmtEUR.format(h.renterBenefitDown)]); if(p.rentInvestDiff) details.push(["Bénéfice locataire – surplus placé", fmtEUR.format(h.renterBenefitSurp)]); details.push(["Manque à gagner propriétaire – apport/capex", fmtEUR.format(h.foregoneDownH + h.foregoneCapexH)]); }
+        details.push([p.includeOpp?"Coût total propriétaire (avec opportunité)":"Coût total propriétaire (cash)",fmtEUR.format(ownerDisplay)]); details.push([p.includeOpp?"Coût total locataire (net placements)":"Coût total locataire (loyers)",fmtEUR.format(renterDisplay)]); details.push(["Écart Achat − Location",(delta>=0?'+':'')+fmtEUR.format(delta)]);
+        const tblD=el('tblDetails'); tblD.innerHTML='<tr><th>Poste</th><th>Montant</th></tr>'+details.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('');
+        const rentCum=p.includeOpp?out.series.rentCumAdj:out.series.rentCum, ownerCash=out.series.ownerCum, ownerOpp=out.series.ownerCumWithOpp; const tblY=el('tblYears'); const header='<tr><th>Année</th><th>Coût locataire cumulé</th><th>Propriétaire cumulé (cash)</th><th>Propriétaire cumulé (opportunité)</th></tr>'; const rows=[]; for(let y=1;y<=p.years;y++){rows.push(`<tr><td>${y}</td><td>${fmtEUR.format(rentCum[y-1])}</td><td>${fmtEUR.format(ownerCash[y-1])}</td><td>${fmtEUR.format(ownerOpp[y-1])}</td></tr>`)} tblY.innerHTML=header+rows.join('');
+        drawChart(rentCum,p.includeOpp?ownerOpp:ownerCash,p.years);
+        window.__exportData={inputs:p,series:out.series,horizon:{...out.horizon,delta}}; el('err').textContent='';
+      }catch(e){el('err').textContent=(e&&e.stack)?e.stack:String(e);console.error(e)}
+    }
+
+    function drawChart(seriesA,seriesB,years){
+      const canvas=el('chart'); const ctx=canvas.getContext('2d'); const W=canvas.width,H=canvas.height; ctx.clearRect(0,0,W,H);
+      const pad={l:64,r:20,t:22,b:56}; const n=Math.max(seriesA.length,seriesB.length); const xStep=(W-pad.l-pad.r)/Math.max(1,(n-1)); const maxV=Math.max(1,...seriesA,...seriesB);
+
+      // Resolve colors from CSS vars
+      const gridColor = getComputedStyle(document.documentElement).getPropertyValue('--grid').trim() || 'rgba(15,23,42,.035)';
+      const axisColor = getComputedStyle(document.documentElement).getPropertyValue('--axis').trim() || 'rgba(15,23,42,.55)';
+      const legendBg = getComputedStyle(document.documentElement).getPropertyValue('--legend-bg').trim() || 'rgba(255,255,255,.96)';
+      const legendBorder = getComputedStyle(document.documentElement).getPropertyValue('--legend-border').trim() || 'rgba(15,23,42,.12)';
+      const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#0f172a';
+
+      // grid Y (lighter + dashed)
+      ctx.save();
+      ctx.strokeStyle = gridColor; ctx.lineWidth = 1; ctx.setLineDash([3,5]);
+      ctx.beginPath(); for(let i=0;i<=5;i++){const y=pad.t+(H-pad.t-pad.b)*(i/5); ctx.moveTo(pad.l,y); ctx.lineTo(W-pad.r,y);} ctx.stroke();
+      ctx.restore();
+
+      // labels Y
+      ctx.fillStyle = axisColor; ctx.font = '12px system-ui'; ctx.textBaseline='middle';
+      for(let i=0;i<=5;i++){const ratio=i/5; const y=pad.t+(H-pad.t-pad.b)*ratio; const val=maxV*(1-ratio); ctx.fillText(fmtEUR.format(val),8,y)}
+
+      // X axis + ticks
+      const baseY=H-pad.b+6; ctx.strokeStyle='rgba(15,23,42,.18)'; ctx.setLineDash([]); ctx.beginPath(); ctx.moveTo(pad.l,baseY); ctx.lineTo(W-pad.r,baseY); ctx.stroke();
+      ctx.fillStyle=axisColor; ctx.textAlign='center'; for(let i=0;i<n;i++){const x=pad.l+i*xStep; ctx.strokeStyle='rgba(15,23,42,.18)'; ctx.beginPath(); ctx.moveTo(x,baseY); ctx.lineTo(x,baseY-6); ctx.stroke(); ctx.fillText(String(i+1),x,baseY+16)} ctx.textAlign='left';
+
+      function yScale(v){return pad.t+(H-pad.t-pad.b)*(1-v/maxV)} function x(i){return pad.l+i*xStep}
+      function line(arr,color,w=2.4){ctx.beginPath(); ctx.lineWidth=w; ctx.strokeStyle=color; arr.forEach((v,i)=>{const X=x(i),Y=yScale(v); if(i===0) ctx.moveTo(X,Y); else ctx.lineTo(X,Y)}); ctx.stroke()}
+      function dots(arr,color){ctx.fillStyle=color; arr.forEach((v,i)=>{const X=x(i),Y=yScale(v); ctx.beginPath(); ctx.arc(X,Y,3,0,Math.PI*2); ctx.fill()})}
+
+      // series
+      const colA = '#16a34a'; // renter
+      const colB = '#2563eb'; // owner
+      line(seriesA,colA); dots(seriesA,colA);
+      line(seriesB,colB); dots(seriesB,colB);
+
+      // legend (pill background)
+      const Lx=W-270, Ly=10, Lw=250, Lh=44; ctx.fillStyle=legendBg; roundRect(ctx,Lx,Ly,Lw,Lh,10,true,false); ctx.strokeStyle=legendBorder; ctx.stroke();
+      const boxW=10, gap=8; ctx.fillStyle=colA; ctx.fillRect(Lx+12, Ly+12, boxW, boxW); ctx.fillStyle=textColor; ctx.fillText('Locataire (cumul)', Lx+12+boxW+gap, Ly+20);
+      ctx.fillStyle=colB; ctx.fillRect(Lx+12, Ly+26, boxW, boxW); ctx.fillStyle=textColor; ctx.fillText('Propriétaire (cumul)', Lx+12+boxW+gap, Ly+34);
+    }
+
+    function roundRect(ctx, x, y, w, h, r, fill, stroke){
+      if (typeof r === 'number') r = {tl:r,tr:r,br:r,bl:r};
+      ctx.beginPath(); ctx.moveTo(x+r.tl, y); ctx.lineTo(x+w-r.tr, y); ctx.quadraticCurveTo(x+w, y, x+w, y+r.tr);
+      ctx.lineTo(x+w, y+h-r.br); ctx.quadraticCurveTo(x+w, y+h, x+w-r.br, y+h);
+      ctx.lineTo(x+r.bl, y+h); ctx.quadraticCurveTo(x, y+h, x, y+h-r.bl);
+      ctx.lineTo(x, y+r.tl); ctx.quadraticCurveTo(x, y, x+r.tl, y);
+      if(fill) ctx.fill(); if(stroke) ctx.stroke();
+    }
+
+    function addCapexRow(containerId,y=1,cost=0){const box=el(containerId);const row=document.createElement('div');row.className='capex-row';row.innerHTML=`<input class=\"capex-year\" type=\"number\" min=\"1\" step=\"1\" value=\"${y}\">`+`<input class=\"capex-cost\" type=\"number\" step=\"100\" value=\"${cost}\">`+`<button class=\"del\" title=\"Supprimer\">×</button>`; box.appendChild(row); row.querySelector('.del').addEventListener('click',()=>{row.remove();model()}); ['input','change'].forEach(ev=>{row.querySelector('.capex-year').addEventListener(ev,model);row.querySelector('.capex-cost').addEventListener(ev,model)})}
+
+    function applyAncPreset(){ const key=el('ancArea').value; const p=ANCIEN_PRESETS[key]; if(!p) return; el('pricePerM2').value=p.ppm2; }
+    function applyNeufPreset(){ const key=el('neufArea').value; const p=NEUF_PRESETS[key]; if(!p) return; el('pricePerM2Neuf').value=p.ppm2; el('coproPerM2').value=p.coproPerM2; el('maintPct').value=p.maintPct; el('tf').value=p.tf; }
+
+    function updateCapexVisibility(){
+      const s = el('scenario').value;
+      el('wrapCapexAnc').style.display = (s==='ancien') ? '' : 'none';
+      el('wrapCapexNeuf').style.display = (s==='neuf') ? '' : 'none';
+      el('lblCapexAnc').textContent = (s==='ancien') ? 'Ancien (actif)' : 'Ancien (inactif)';
+      el('lblCapexNeuf').textContent = (s==='neuf') ? 'Neuf (actif)' : 'Neuf (inactif)';
+    }
+
+    function updateScenarioUI(){
+      const s = el('scenario').value;
+      el('sectAncien').style.display = (s==='ancien') ? '' : 'none';
+      el('sectNeuf').style.display   = (s==='neuf')   ? '' : 'none';
+      el('ptzBox').style.display     = (s==='neuf')   ? '' : 'none';
+      el('tfExemptRow').style.display= (s==='neuf')   ? '' : 'none';
+      el('notary').value = (s==='neuf') ? 3 : 7.5;
+      if(s==='ancien'){ applyAncPreset(); } else { applyNeufPreset(); }
+      updateCapexVisibility();
+      model();
+    }
+
+    function bind(){
+      const ids=['scenario','years','priceGrowth','customGrowth','toggleOpp','altReturn','ancArea','neufArea','surface','surfaceNeuf','pricePerM2','pricePerM2Neuf','downPayment','rate','term','notary','sellFee','incomeNet','otherDebt','coproPerM2','maintPct','tf','tfExempt','mrh','rentSmall','rentSmallYears','rentBig','irl','ptzAmount','ptzTerm','optRentInvestDown','optRentInvestDiff']; ids.forEach(id=>el(id).addEventListener('input',model));
+      el('scenario').addEventListener('change', updateScenarioUI);
+      el('priceGrowth').addEventListener('change',e=>{const v=e.target.value; const row=el('customGrowthRow'); row.style.display=(v==='custom')?'grid':'none'; model()});
+      el('btnReset').addEventListener('click',()=>{defaults(); model()});
+      el('btnExport').addEventListener('click',exportCSV); el('btnTests').addEventListener('click',runTests);
+      el('ancArea').addEventListener('change',()=>{applyAncPreset(); model()}); el('btnRestoreAnc').addEventListener('click',()=>{applyAncPreset(); model()});
+      el('neufArea').addEventListener('change',()=>{applyNeufPreset(); model()}); el('btnRestoreNeuf').addEventListener('click',()=>{applyNeufPreset(); model()});
+      el('addCapexAnc').addEventListener('click',()=>{addCapexRow('capexAnc',5,10000)}); el('addCapexNeuf').addEventListener('click',()=>{addCapexRow('capexNeuf',10,8000)});
+    }
+
+    function defaults(){
+      el('scenario').value='ancien';
+      el('years').value=10; el('priceGrowth').value='0'; el('customGrowth').value=0.8; el('toggleOpp').checked=true; el('altReturn').value=3;
+      el('ancArea').value='paris11'; el('neufArea').value='paris13n';
+      el('surface').value=65; el('surfaceNeuf').value=65; el('downPayment').value=143000; el('rate').value=3.18; el('term').value=25; el('notary').value=7.5; el('sellFee').value=5;
+      el('incomeNet').value=7150; el('otherDebt').value=0;
+      el('coproPerM2').value=43.34; el('maintPct').value=0.5; el('tf').value=1300; el('mrh').value=200; el('tfExempt').value=0;
+      el('ptzAmount').value=0; el('ptzTerm').value=20; 
+      el('optRentInvestDown').checked=false; el('optRentInvestDiff').checked=false;
+      el('rentSmall').value=1690; el('rentSmallYears').value=2; el('rentBig').value=2000; el('irl').value=1.2; el('customGrowthRow').style.display='none';
+      el('capexAnc').innerHTML=''; el('capexNeuf').innerHTML=''; addCapexRow('capexAnc', 7, 12000);
+      applyAncPreset(); applyNeufPreset(); updateScenarioUI();
+    }
+
+    function exportCSV(){ if(!window.__exportData) return; const {inputs,series,horizon}=window.__exportData; const lines=[]; lines.push('section,key,value'); for(const [k,v] of Object.entries(inputs)) lines.push(`inputs,${k},${v}`); lines.push('series,year,rentCum,ownerCum,ownerCumWithOpp,rentCumAdj'); const n=series.rentCum.length; for(let i=0;i<n;i++) lines.push(`series,${i+1},${series.rentCum[i]},${series.ownerCum[i]},${series.ownerCumWithOpp[i]},${series.rentCumAdj[i]}`); for(const [k,v] of Object.entries(horizon)) lines.push(`horizon,${k},${v}`); const csv=lines.join('\n'); const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='simulation_achat_vs_location_scenario_v3_1.csv'; a.click(); setTimeout(()=>URL.revokeObjectURL(url),5000) }
+
+    // --- Tests intégrés ---
+    const approxEqual=(a,b,eps=2)=>Math.abs(a-b)<=eps;
+    function runTests(){
+      const log=[]; const pass=m=>log.push('✅ '+m); const fail=m=>log.push('❌ '+m);
+      const m1=pmt(100000,12,30); (approxEqual(m1,1028.61,1.6)?pass:fail)(`PMT(100k,12%,30y) ≈ 1028.6 → ${m1.toFixed(2)}`);
+      const m2=pmt(100000,3,25);  (approxEqual(m2,474.0,2.0)?pass:fail)(`PMT(100k,3%,25y) ≈ 474 → ${m2.toFixed(2)}`);
+      const sch=amortSchedule(100000,3,25); const endBal=sch.length?sch[sch.length-1].balance:NaN; (Math.abs(endBal)<0.01?pass:fail)(`Amortization end balance ≈ 0 → ${endBal.toFixed(4)}`);
+      const paramsIRL={years:2,g:0,altReturn:0.03,includeOpp:false,surface:60,pricePerM2:9000,down:200000,rate:3,term:25,notaryPct:0.075,sellFeePct:0.05,coproPerM2:40,maintPct:0.005,tf:1000,tfExemptYears:0,mrh:200,rentSmall:1500,rentSmallYears:2,rentBig:1500,irl:0.02,capexEvents:[],ptzAmount:0,ptzTerm:20};
+      const outIRL=compute({...paramsIRL}); const y1=12*1500; const y2=y1+12*1500*(1+0.02);
+      (approxEqual(outIRL.series.rentCum[0],y1,1)?pass:fail)(`IRL Y1 attendu ${y1} → ${outIRL.series.rentCum[0].toFixed(2)}`);
+      (approxEqual(outIRL.series.rentCum[1],y2,2)?pass:fail)(`IRL Y2 attendu ${y2} → ${outIRL.series.rentCum[1].toFixed(2)}`);
+      const base=compute({...paramsIRL, years:5});
+      const withCapex=compute({...paramsIRL, years:5, capexEvents:[{year:3, cost:10000}]});
+      (withCapex.series.ownerCum[2] >= base.series.ownerCum[2] + 10000 - 1 ? pass : fail)(`Capex Y3 +10k impact année 3`);
+      const mTest=pmt(100000,3,25); const dti=(mTest+126)/2000; (approxEqual(dti*100,30,2)?pass:fail)(`DTI ~30% → ${(dti*100).toFixed(1)}%`);
+      const oppCase=compute({...paramsIRL,years:5}); (oppCase.horizon.ownerCashHOpp>=oppCase.horizon.ownerCashH?pass:fail)(`Owner(opp) ≥ Owner(cash)`);
+      const downOwnerOnly=compute({...paramsIRL, years:10, includeOpp:true, rentInvestDown:false});
+      const downRenter=compute({...paramsIRL, years:10, includeOpp:true, rentInvestDown:true});
+      const gainDown = 200000*(Math.pow(1+0.03,10)-1);
+      // Quand on passe en mode locataire pour l'apport, la courbe locataire ajustée baisse d'environ le même gain, et le manque à gagner proprio disparaît
+      ((Math.abs((downRenter.series.rentCumAdj[9]-downRenter.series.rentCum[9]) + gainDown) < 200) ? pass : fail)(`Apport investi côté locataire (~gainDown)`);
+      ((Math.abs(downRenter.horizon.foregoneDownH) < 1) ? pass : fail)(`Pas de manque à gagner sur apport côté propriétaire quand 'investir apport' est activé`);
+      // Surplus investi: si le loyer est très bas, la courbe locataire doit baisser avec l'option
+      const cheapRent=compute({...paramsIRL, years:3, includeOpp:true, rentInvestDiff:true, rentSmall:500, rentBig:500});
+      (cheapRent.series.rentCumAdj[2] < cheapRent.series.rentCum[2] ? pass : fail)(`Surplus mensuel investi réduit le coût locataire`);
+
+      document.getElementById('testLog').textContent=log.join('\n'); const ok=log.every(l=>l.startsWith('✅')); document.getElementById('testStatus').textContent=ok?'Tous les tests passent':'Échecs dans les tests'; document.getElementById('testStatus').className=ok?'test-ok':'test-bad';
+    }
+
+    // init
+    defaults(); bind(); model();
+  </script>
+</body>
+</html>
