@@ -652,14 +652,40 @@
     }
 
     function bind(){
-      const ids=['scenario','years','priceGrowth','customGrowth','toggleOpp','altReturn','ancArea','neufArea','surface','surfaceNeuf','pricePerM2','pricePerM2Neuf','downPayment','rate','term','notary','sellFee','incomeNet','otherDebt','coproPerM2','maintPct','tf','tfExempt','mrh','rentSmall','rentSmallYears','rentBig','irl','ptzAmount','ptzTerm']; ids.forEach(id=>el(id).addEventListener('input',model));
+      const ids = [
+        'scenario','years','priceGrowth','customGrowth','toggleOpp','altReturn',
+        'ancArea','neufArea','surface','surfaceNeuf','pricePerM2','pricePerM2Neuf',
+        'downPayment','rate','term','notary','sellFee','incomeNet','otherDebt',
+        'coproPerM2','maintPct','tf','tfExempt','mrh','rentSmall','rentSmallYears',
+        'rentBig','irl','ptzAmount','ptzTerm'
+      ];
+      ids.forEach(id=>{
+        const node = el(id);
+        if(!node) return;
+        node.addEventListener('input', model);
+        node.addEventListener('change', model);
+      });
+
+      // Garde tes handlers spécifiques (ils resteront utiles)
       el('scenario').addEventListener('change', updateScenarioUI);
-      el('priceGrowth').addEventListener('change',e=>{const v=e.target.value; const row=el('customGrowthRow'); row.style.display=(v==='custom')?'grid':'none'; model()});
+      el('priceGrowth').addEventListener('change', e=>{
+        const v=e.target.value;
+        const row=el('customGrowthRow');
+        row.style.display=(v==='custom')?'grid':'none';
+        model();
+      });
+
       el('btnReset').addEventListener('click',()=>{defaults(); model()});
-      el('btnExport').addEventListener('click',exportCSV); el('btnTests').addEventListener('click',runTests);
-      el('ancArea').addEventListener('change',()=>{applyAncPreset(); model()}); el('btnRestoreAnc').addEventListener('click',()=>{applyAncPreset(); model()});
-      el('neufArea').addEventListener('change',()=>{applyNeufPreset(); model()}); el('btnRestoreNeuf').addEventListener('click',()=>{applyNeufPreset(); model()});
-      el('addCapexAnc').addEventListener('click',()=>{addCapexRow('capexAnc',5,10000)}); el('addCapexNeuf').addEventListener('click',()=>{addCapexRow('capexNeuf',10,8000)});
+      el('btnExport').addEventListener('click',exportCSV);
+      el('btnTests').addEventListener('click',runTests);
+
+      el('ancArea').addEventListener('change',()=>{applyAncPreset(); model()});
+      el('btnRestoreAnc').addEventListener('click',()=>{applyAncPreset(); model()});
+      el('neufArea').addEventListener('change',()=>{applyNeufPreset(); model()});
+      el('btnRestoreNeuf').addEventListener('click',()=>{applyNeufPreset(); model()});
+
+      el('addCapexAnc').addEventListener('click',()=>{addCapexRow('capexAnc',5,10000)});
+      el('addCapexNeuf').addEventListener('click',()=>{addCapexRow('capexNeuf',10,8000)});
     }
 
     function defaults(){
