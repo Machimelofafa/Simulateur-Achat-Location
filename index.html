@@ -378,6 +378,8 @@
       stouenn:{label:'Saint-Ouen (neuf)', ppm2:8500, coproPerM2:32, maintPct:0.28, tf:1050}
     };
 
+    const ANCIEN_BASELINE = {coproPerM2:43.34, maintPct:0.5, tf:1300};
+
     // Helpers numériques
     function pmic(rate){return rate/100/12}
     function pmt(principal, annualRatePct, years){const r=pmic(annualRatePct),n=years*12;return r===0?principal/n:principal*(r*Math.pow(1+r,n))/(Math.pow(1+r,n)-1)}
@@ -635,8 +637,16 @@
       el('sectNeuf').style.display   = (s==='neuf')   ? '' : 'none';
       el('ptzBox').style.display     = (s==='neuf')   ? '' : 'none';
       el('tfExemptRow').style.display= (s==='neuf')   ? '' : 'none';
-      el('notary').value = (s==='neuf') ? 3 : 7.5;
-      if(s==='ancien'){ applyAncPreset(); } else { applyNeufPreset(); }
+      if(s==='ancien'){
+        el('notary').value = 7.5;
+        applyAncPreset();
+        el('coproPerM2').value = ANCIEN_BASELINE.coproPerM2;
+        el('maintPct').value = ANCIEN_BASELINE.maintPct;
+        el('tf').value = ANCIEN_BASELINE.tf;
+      } else if(s==='neuf'){
+        el('notary').value = 3;
+        applyNeufPreset();
+      }
       updateCapexVisibility();
       model();
     }
@@ -658,11 +668,16 @@
       el('ancArea').value='paris11'; el('neufArea').value='paris13n';
       el('surface').value=65; el('surfaceNeuf').value=65; el('downPayment').value=143000; el('rate').value=3.18; el('term').value=25; el('notary').value=7.5; el('sellFee').value=5;
       el('incomeNet').value=7150; el('otherDebt').value=0;
-      el('coproPerM2').value=43.34; el('maintPct').value=0.5; el('tf').value=1300; el('mrh').value=200; el('tfExempt').value=0;
-      el('ptzAmount').value=0; el('ptzTerm').value=20; 
+      el('coproPerM2').value=ANCIEN_BASELINE.coproPerM2; el('maintPct').value=ANCIEN_BASELINE.maintPct; el('tf').value=ANCIEN_BASELINE.tf; el('mrh').value=200; el('tfExempt').value=0;
+      el('ptzAmount').value=0; el('ptzTerm').value=20;
       el('rentSmall').value=1690; el('rentSmallYears').value=2; el('rentBig').value=2000; el('irl').value=1.2; el('customGrowthRow').style.display='none';
       el('capexAnc').innerHTML=''; el('capexNeuf').innerHTML=''; addCapexRow('capexAnc', 7, 12000);
-      applyAncPreset(); applyNeufPreset(); updateScenarioUI();
+      applyAncPreset();
+      const defaultNeufPreset = NEUF_PRESETS[el('neufArea').value];
+      if(defaultNeufPreset){
+        el('pricePerM2Neuf').value = defaultNeufPreset.ppm2;
+      }
+      updateScenarioUI();
     }
 
     function exportCSV(){ if(!window.__exportData) return; const {inputs,series,horizon,breakdown}=window.__exportData; const lines=[];
