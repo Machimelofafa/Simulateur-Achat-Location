@@ -281,24 +281,24 @@
           <div class="keymetrics">
             <div class="metric"><div class="k" id="kMonthly">—</div><div class="l">Mensualité crédit</div></div>
             <div class="metric"><div class="k" id="kDTI">—</div><div class="l">Taux d'endettement (total)</div></div>
-            <div class="metric"><div class="k" id="kOwner10">—</div><div class="l">Coût propriétaire (horizon)</div></div>
-            <div class="metric"><div class="k" id="kRenter10">—</div><div class="l">Coût locataire (horizon)</div></div>
-            <div class="metric"><div class="k" id="kDelta">—</div><div class="l">Écart Achat − Location</div></div>
+            <div class="metric"><div class="k" id="kOwner10">—</div><div class="l">Patrimoine final – Achat</div></div>
+            <div class="metric"><div class="k" id="kRenter10">—</div><div class="l">Patrimoine final – Location</div></div>
+            <div class="metric"><div class="k" id="kDelta">—</div><div class="l">Écart de patrimoine</div></div>
           </div>
           <div class="hr"></div>
           <div class="row">
             <span id="tagGrowth" class="chip">Scénario prix: 0,0 %/an</span>
-            <span id="tagOpp" class="chip">Avec coût d'opportunité</span>
-            <span id="tagBE" class="chip">Break-even: —</span>
+            <span id="tagOpp" class="chip">Placement alternatif</span>
+            <span id="tagBE" class="chip">Parité patrimoine: —</span>
             <span id="tagScenario" class="chip">Ancien</span>
           </div>
         </div>
 
         <div class="section">
           <div class="canvas-card">
-            <canvas id="chart" width="900" height="360" aria-label="Courbes cumulées achat vs location"></canvas>
+            <canvas id="chart" width="900" height="360" aria-label="Évolution du patrimoine achat vs location"></canvas>
           </div>
-          <div class="note">Courbes des coûts cumulés par année avec graduations annuelles. Si les options d'opportunité sont cochées, la courbe locataire est réduite du capital placé (apport/surplus) et la courbe propriétaire inclut le manque à gagner sur l'apport/capex non placés.</div>
+          <div class="note">Patrimoine net (après charges, remboursements, placements et frais de cession). Si l'option « coût d'opportunité » est activée, le patrimoine propriétaire intègre le manque à gagner sur l'apport/capex et le patrimoine locataire capitalise le surplus placé.</div>
         </div>
 
         <div class="section">
@@ -417,9 +417,15 @@
 
       const renterNetWorthSeries=new Array(years).fill(0);
       let renterBalance=down;
+      let renterInvestedSurplus=0;
+      let renterWithdrawals=0;
+      let renterFlowNet=0;
       for(let m=1;m<=months;m++){
         renterBalance*=1+monthlyAltRate;
-        renterBalance+=ownerMonthlyCosts[m-1]-rentMonthly[m-1];
+        const flow=ownerMonthlyCosts[m-1]-rentMonthly[m-1];
+        renterBalance+=flow;
+        renterFlowNet+=flow;
+        if(flow>=0) renterInvestedSurplus+=flow; else renterWithdrawals+=-flow;
         if(m%12===0) renterNetWorthSeries[m/12-1]=renterBalance;
       }
       if(years===0) renterBalance=down;
@@ -460,12 +466,43 @@
       const ownerCashH=baseOwnerH+capexH; const ownerCashHOpp=ownerCashH+foregoneDownH+foregoneCapexH;
 
       const renterNetWorth=renterNetWorthSeries[years-1]||down;
+      const renterTotalInvested=down+renterInvestedSurplus;
+      const renterNetContribution=down+renterFlowNet;
       const rentCumAdj=rentCum.map((v,idx)=> v - ((renterNetWorthSeries[idx]||down)-down));
 
       const renterCashH=sum(rentYears);
       let beYear=null; const ownerSeriesUse=includeOpp?ownerCumWithOpp:ownerCum; const rentSeriesUse=(includeOpp?rentCumAdj:rentCum); for(let i=0;i<years;i++){ if(ownerSeriesUse[i]<=rentSeriesUse[i]){ beYear=i+1; break; } }
+      let beWealthYear=null; const ownerWealthSeriesUse=includeOpp?ownerNetWorthWithOpp:ownerNetWorth; for(let i=0;i<years;i++){ if(ownerWealthSeriesUse[i]>=renterNetWorthSeries[i]){ beWealthYear=i+1; break; } }
 
-      return{series:{rentCum,ownerCum,ownerCumWithOpp,rentCumAdj,ownerNetWorth,ownerNetWorthWithOpp,renterNetWorth:renterNetWorthSeries},horizon:{monthly,ownerCashH,ownerCashHOpp,renterCashH,totalInterest:last.totalInterest,totalPrincipal:last.totalPrincipal,remaining:last.remaining,netSaleH,beYear,capexH,foregoneDownH,foregoneCapexH,renterNetWorth,ownerNetWorth:ownerNetWorth[ownerNetWorth.length-1]||0,ownerNetWorthWithOpp:ownerNetWorthWithOpp[ownerNetWorthWithOpp.length-1]||0,ptzPayMonthly:(schedPTZ[0]?schedPTZ[0].pay:0)},derived:{price,totalCost,loan:loanMain+ptzAmount,recurringY1:recYear(1)}};
+      const ownerOpportunityCost=foregoneDownH+foregoneCapexH;
+      const ownerBreakdown={
+        salePrice:salePriceH,
+        saleCosts:saleCostsH,
+        loanRemaining:last.remaining,
+        netSale:netSaleH,
+        down,
+        totalPaid:last.totalPaid,
+        totalPrincipal:last.totalPrincipal,
+        totalInterest:last.totalInterest,
+        charges:recCum[years-1]||0,
+        capex:capexH,
+        opportunityCost:ownerOpportunityCost,
+        cashOut:ownerCashH,
+        cashOutWithOpp:ownerCashHOpp,
+        netWorthCash:ownerNetWorth[ownerNetWorth.length-1]||0,
+        netWorthWithOpp:ownerNetWorthWithOpp[ownerNetWorthWithOpp.length-1]||0
+      };
+      const renterBreakdown={
+        initial:down,
+        surplusInvested:renterInvestedSurplus,
+        withdrawals:renterWithdrawals,
+        totalInvested:renterTotalInvested,
+        netContribution:renterNetContribution,
+        netWorth:renterNetWorth,
+        altReturn:altRateEff
+      };
+
+      return{series:{rentCum,ownerCum,ownerCumWithOpp,rentCumAdj,ownerNetWorth,ownerNetWorthWithOpp,renterNetWorth:renterNetWorthSeries},horizon:{monthly,ownerCashH,ownerCashHOpp,renterCashH,totalInterest:last.totalInterest,totalPrincipal:last.totalPrincipal,remaining:last.remaining,netSaleH,beYear,beWealthYear,capexH,foregoneDownH,foregoneCapexH,renterNetWorth,ownerNetWorth:ownerNetWorth[ownerNetWorth.length-1]||0,ownerNetWorthWithOpp:ownerNetWorthWithOpp[ownerNetWorthWithOpp.length-1]||0,ownerEquityNet:netSaleH,ownerSalePrice:salePriceH,ownerSaleCosts:saleCostsH,ownerCharges:recCum[years-1]||0,renterTotalInvested,renterWithdrawals,renterNetContribution,ptzPayMonthly:(schedPTZ[0]?schedPTZ[0].pay:0)},derived:{price,totalCost,loan:loanMain+ptzAmount,recurringY1:recYear(1)},breakdown:{owner:ownerBreakdown,renter:renterBreakdown}};
     }
 
     const el=id=>document.getElementById(id);
@@ -481,29 +518,54 @@
       try{
         const p=readInputs(); const out=compute(p);
         el('kMonthly').textContent=fmtEUR.format(out.horizon.monthly);
-        const ownerDisplay=p.includeOpp?out.horizon.ownerCashHOpp:out.horizon.ownerCashH;
-        el('kOwner10').textContent=fmtEUR.format(ownerDisplay);
-        const renterDisplay=p.includeOpp? (out.series.rentCumAdj[out.series.rentCumAdj.length-1]) : out.horizon.renterCashH;
-        el('kRenter10').textContent=fmtEUR.format(renterDisplay);
-        const delta=ownerDisplay-renterDisplay; const kDelta=el('kDelta'); kDelta.textContent=(delta>=0?'+':'')+fmtEUR.format(delta); kDelta.style.color=delta<0?'var(--ok)':'var(--bad)';
+        const ownerWealth=p.includeOpp?out.horizon.ownerNetWorthWithOpp:out.horizon.ownerNetWorth;
+        const renterWealth=out.horizon.renterNetWorth;
+        el('kOwner10').textContent=fmtEUR.format(ownerWealth);
+        el('kRenter10').textContent=fmtEUR.format(renterWealth);
+        const delta=ownerWealth-renterWealth; const kDelta=el('kDelta'); kDelta.textContent=(delta>=0?'+':'')+fmtEUR.format(delta); kDelta.style.color=delta>=0?'var(--ok)':'var(--bad)';
         let dtiTxt='—',dtiClass=''; if(p.incomeNet>0){const dti=(out.horizon.monthly+p.otherDebt)/p.incomeNet; dtiTxt=fmtPCT.format(dti); if(dti<=0.35)dtiClass='tag-ok'; else if(dti<=0.4)dtiClass='tag-warn'; else dtiClass='tag-bad';} const kDTI=el('kDTI'); kDTI.textContent=dtiTxt; kDTI.className='k '+dtiClass;
-        const growthPct=(readInputs().g*100).toFixed(1).replace('.',','); el('tagGrowth').textContent=`Scénario prix: ${growthPct} %/an`; el('tagOpp').textContent=p.includeOpp?'Avec coût d\'opportunité':'Sans coût d\'opportunité'; el('tagBE').textContent=`Break-even: ${out.horizon.beYear?('année '+out.horizon.beYear):'—'}`; el('tagScenario').textContent=(p.scenario==='neuf')?'Neuf':'Ancien';
-        const d=out.derived,h=out.horizon; const details=[["Prix d\'achat",fmtEUR.format(d.price)],["Frais d\'acquisition",fmtEUR.format(d.price*(readInputs().notaryPct))],["Coût total (prix+frais)",fmtEUR.format(d.totalCost)],["Apport",fmtEUR.format(readInputs().down)],["Emprunt (total)",fmtEUR.format(d.loan)],["Mensualité PTZ (si >0)",fmtEUR.format(h.ptzPayMonthly)],["Intérêts payés (horizon)",fmtEUR.format(h.totalInterest)],["Capital remboursé (horizon)",fmtEUR.format(h.totalPrincipal)],["Solde restant dû (horizon)",fmtEUR.format(h.remaining)],["Coûts récurrents/an Y1 (copro+entretien+TF+MRH)",fmtEUR.format(d.recurringY1)],["Produit net de vente (horizon)",fmtEUR.format(h.netSaleH)],["Travaux extraordinaires (cumul horizon)",fmtEUR.format(h.capexH)]];
-        if(p.includeOpp){ details.push(["Manque à gagner propriétaire – apport/capex", fmtEUR.format(h.foregoneDownH + h.foregoneCapexH)]); }
-        details.push(["Patrimoine net propriétaire (cash)", fmtEUR.format(h.ownerNetWorth)]);
-        if(p.includeOpp) details.push(["Patrimoine net propriétaire (avec opportunité)", fmtEUR.format(h.ownerNetWorthWithOpp)]);
-        details.push(["Patrimoine net locataire", fmtEUR.format(h.renterNetWorth)]);
-        details.push([p.includeOpp?"Coût total propriétaire (avec opportunité)":"Coût total propriétaire (cash)",fmtEUR.format(ownerDisplay)]); details.push([p.includeOpp?"Coût total locataire (net placements)":"Coût total locataire (loyers)",fmtEUR.format(renterDisplay)]); details.push(["Écart Achat − Location",(delta>=0?'+':'')+fmtEUR.format(delta)]);
-        const tblD=el('tblDetails'); tblD.innerHTML='<tr><th>Poste</th><th>Montant</th></tr>'+details.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('');
-        const rentCum=p.includeOpp?out.series.rentCumAdj:out.series.rentCum, ownerCash=out.series.ownerCum, ownerOpp=out.series.ownerCumWithOpp; const tblY=el('tblYears'); const header='<tr><th>Année</th><th>Coût locataire cumulé</th><th>Propriétaire cumulé (cash)</th><th>Propriétaire cumulé (opportunité)</th></tr>'; const rows=[]; for(let y=1;y<=p.years;y++){rows.push(`<tr><td>${y}</td><td>${fmtEUR.format(rentCum[y-1])}</td><td>${fmtEUR.format(ownerCash[y-1])}</td><td>${fmtEUR.format(ownerOpp[y-1])}</td></tr>`)} tblY.innerHTML=header+rows.join('');
-        drawChart(rentCum,p.includeOpp?ownerOpp:ownerCash,p.years);
-        window.__exportData={inputs:p,series:out.series,horizon:{...out.horizon,delta}}; el('err').textContent='';
+        const growthPct=(p.g*100).toFixed(1).replace('.',','); el('tagGrowth').textContent=`Prix logement: ${growthPct} %/an`; const altLabel=fmtPCT.format(p.altReturn); el('tagOpp').textContent=p.includeOpp?`Placement alternatif activé (${altLabel}/an)`: `Placement alternatif inactif (${altLabel}/an)`; el('tagBE').textContent=`Parité patrimoine: ${out.horizon.beWealthYear?('année '+out.horizon.beWealthYear):'—'}`; el('tagScenario').textContent=(p.scenario==='neuf')?'Neuf':'Ancien';
+        const b=out.breakdown; const ownerTitle=p.includeOpp?'Patrimoine final – Achat (avec opportunité)':'Patrimoine final – Achat'; const renterTitle='Patrimoine final – Location'; const ownerRows=[
+          [`Valeur de marché du bien (année ${p.years})`,fmtEUR.format(b.owner.salePrice)],
+          ['Capital restant dû',fmtEUR.format(b.owner.loanRemaining)],
+          ['Frais de cession estimés',fmtEUR.format(b.owner.saleCosts)],
+          ['Valeur nette du bien',fmtEUR.format(b.owner.netSale)],
+          ['Apport initial',fmtEUR.format(b.owner.down)],
+          ['Mensualités versées (cumul)',fmtEUR.format(b.owner.totalPaid)],
+          ['Dont capital remboursé',fmtEUR.format(b.owner.totalPrincipal)],
+          ['Dont intérêts payés',fmtEUR.format(b.owner.totalInterest)],
+          ['Charges & taxes cumulées',fmtEUR.format(b.owner.charges)],
+          ['Capex cumulés',fmtEUR.format(b.owner.capex)],
+          ['Sorties de trésorerie (cash)',fmtEUR.format(b.owner.cashOut)]
+        ];
+        if(p.includeOpp){ ownerRows.push(['Coût d'opportunité cumulé',fmtEUR.format(b.owner.opportunityCost)]); ownerRows.push(['Sorties totales (incl. opportunité)',fmtEUR.format(b.owner.cashOutWithOpp)]); }
+        ownerRows.push([ownerTitle,fmtEUR.format(ownerWealth)]);
+        const renterRows=[
+          ['Capital initial placé',fmtEUR.format(b.renter.initial)],
+          ['Surplus placé (cumul)',fmtEUR.format(b.renter.surplusInvested)],
+        ];
+        if(b.renter.withdrawals>0){ renterRows.push(['Retraits liés au surcoût de loyers',fmtEUR.format(b.renter.withdrawals)]); }
+        renterRows.push(['Capital total investi',fmtEUR.format(b.renter.totalInvested)]);
+        renterRows.push(['Contribution nette (après retraits)',fmtEUR.format(b.renter.netContribution)]);
+        renterRows.push(['Taux de placement retenu',fmtPCT.format(b.renter.altReturn)]);
+        renterRows.push([renterTitle,fmtEUR.format(renterWealth)]);
+        renterRows.push(['Écart de patrimoine (Achat − Location)',(delta>=0?'+':'')+fmtEUR.format(delta)]);
+        const tblD=el('tblDetails');
+        const allRows=['<tr><th>Poste</th><th>Montant</th></tr>','<tr><th colspan="2">Propriétaire</th></tr>',...ownerRows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`),'<tr><th colspan="2">Locataire</th></tr>',...renterRows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`)];
+        tblD.innerHTML=allRows.join('');
+        const ownerSeriesNet=p.includeOpp?out.series.ownerNetWorthWithOpp:out.series.ownerNetWorth; const renterSeries=out.series.renterNetWorth; const tblY=el('tblYears'); const header='<tr><th>Année</th><th>Patrimoine locataire</th><th>Patrimoine propriétaire</th><th>Écart (Achat − Location)</th></tr>'; const rows=[]; for(let y=1;y<=p.years;y++){const ownerVal=ownerSeriesNet[y-1]; const renterVal=renterSeries[y-1]; const deltaYear=ownerVal-renterVal; rows.push(`<tr><td>${y}</td><td>${fmtEUR.format(renterVal)}</td><td>${fmtEUR.format(ownerVal)}</td><td>${(deltaYear>=0?'+':'')+fmtEUR.format(deltaYear)}</td></tr>`);} tblY.innerHTML=header+rows.join('');
+        drawChart(ownerSeriesNet,renterSeries);
+        window.__exportData={inputs:p,series:out.series,horizon:{...out.horizon,delta},breakdown:out.breakdown}; el('err').textContent='';
       }catch(e){el('err').textContent=(e&&e.stack)?e.stack:String(e);console.error(e)}
     }
 
-    function drawChart(seriesA,seriesB,years){
+    function drawChart(seriesOwner,seriesRenter){
       const canvas=el('chart'); const ctx=canvas.getContext('2d'); const W=canvas.width,H=canvas.height; ctx.clearRect(0,0,W,H);
-      const pad={l:64,r:20,t:22,b:56}; const n=Math.max(seriesA.length,seriesB.length); const xStep=(W-pad.l-pad.r)/Math.max(1,(n-1)); const maxV=Math.max(1,...seriesA,...seriesB);
+      const pad={l:64,r:20,t:22,b:56}; const n=Math.max(seriesOwner.length,seriesRenter.length); const xStep=(W-pad.l-pad.r)/Math.max(1,(n-1));
+      const combined=[...seriesOwner,...seriesRenter,0];
+      let maxV=Math.max(...combined); let minV=Math.min(...combined);
+      if(maxV===minV){maxV+=1; minV-=1;}
+      const range=maxV-minV;
 
       // Resolve colors from CSS vars
       const gridColor = getComputedStyle(document.documentElement).getPropertyValue('--grid').trim() || 'rgba(15,23,42,.035)';
@@ -520,26 +582,28 @@
 
       // labels Y
       ctx.fillStyle = axisColor; ctx.font = '12px system-ui'; ctx.textBaseline='middle';
-      for(let i=0;i<=5;i++){const ratio=i/5; const y=pad.t+(H-pad.t-pad.b)*ratio; const val=maxV*(1-ratio); ctx.fillText(fmtEUR.format(val),8,y)}
+      for(let i=0;i<=5;i++){const ratio=i/5; const y=pad.t+(H-pad.t-pad.b)*ratio; const val=maxV - range*ratio; ctx.fillText(fmtEUR.format(val),8,y)}
 
       // X axis + ticks
       const baseY=H-pad.b+6; ctx.strokeStyle='rgba(15,23,42,.18)'; ctx.setLineDash([]); ctx.beginPath(); ctx.moveTo(pad.l,baseY); ctx.lineTo(W-pad.r,baseY); ctx.stroke();
       ctx.fillStyle=axisColor; ctx.textAlign='center'; for(let i=0;i<n;i++){const x=pad.l+i*xStep; ctx.strokeStyle='rgba(15,23,42,.18)'; ctx.beginPath(); ctx.moveTo(x,baseY); ctx.lineTo(x,baseY-6); ctx.stroke(); ctx.fillText(String(i+1),x,baseY+16)} ctx.textAlign='left';
 
-      function yScale(v){return pad.t+(H-pad.t-pad.b)*(1-v/maxV)} function x(i){return pad.l+i*xStep}
+      function yScale(v){return pad.t+(H-pad.t-pad.b)*(1-(v-minV)/range)} function x(i){return pad.l+i*xStep}
       function line(arr,color,w=2.4){ctx.beginPath(); ctx.lineWidth=w; ctx.strokeStyle=color; arr.forEach((v,i)=>{const X=x(i),Y=yScale(v); if(i===0) ctx.moveTo(X,Y); else ctx.lineTo(X,Y)}); ctx.stroke()}
       function dots(arr,color){ctx.fillStyle=color; arr.forEach((v,i)=>{const X=x(i),Y=yScale(v); ctx.beginPath(); ctx.arc(X,Y,3,0,Math.PI*2); ctx.fill()})}
 
       // series
       const colA = '#16a34a'; // renter
       const colB = '#2563eb'; // owner
-      line(seriesA,colA); dots(seriesA,colA);
-      line(seriesB,colB); dots(seriesB,colB);
+      line(seriesRenter,colA); dots(seriesRenter,colA);
+      line(seriesOwner,colB); dots(seriesOwner,colB);
+
+      if(minV<0 && maxV>0){const yZero=yScale(0); ctx.strokeStyle='rgba(15,23,42,.25)'; ctx.beginPath(); ctx.moveTo(pad.l,yZero); ctx.lineTo(W-pad.r,yZero); ctx.stroke();}
 
       // legend (pill background)
       const Lx=W-270, Ly=10, Lw=250, Lh=44; ctx.fillStyle=legendBg; roundRect(ctx,Lx,Ly,Lw,Lh,10,true,false); ctx.strokeStyle=legendBorder; ctx.stroke();
-      const boxW=10, gap=8; ctx.fillStyle=colA; ctx.fillRect(Lx+12, Ly+12, boxW, boxW); ctx.fillStyle=textColor; ctx.fillText('Locataire (cumul)', Lx+12+boxW+gap, Ly+20);
-      ctx.fillStyle=colB; ctx.fillRect(Lx+12, Ly+26, boxW, boxW); ctx.fillStyle=textColor; ctx.fillText('Propriétaire (cumul)', Lx+12+boxW+gap, Ly+34);
+      const boxW=10, gap=8; ctx.fillStyle=colB; ctx.fillRect(Lx+12, Ly+12, boxW, boxW); ctx.fillStyle=textColor; ctx.fillText('Patrimoine propriétaire', Lx+12+boxW+gap, Ly+20);
+      ctx.fillStyle=colA; ctx.fillRect(Lx+12, Ly+26, boxW, boxW); ctx.fillStyle=textColor; ctx.fillText('Patrimoine locataire',Lx+12+boxW+gap, Ly+34);
     }
 
     function roundRect(ctx, x, y, w, h, r, fill, stroke){
@@ -600,7 +664,26 @@
       applyAncPreset(); applyNeufPreset(); updateScenarioUI();
     }
 
-    function exportCSV(){ if(!window.__exportData) return; const {inputs,series,horizon}=window.__exportData; const lines=[]; lines.push('section,key,value'); for(const [k,v] of Object.entries(inputs)) lines.push(`inputs,${k},${v}`); lines.push('series,year,rentCum,rentCumAdj,ownerCum,ownerCumWithOpp,ownerNetWorth,ownerNetWorthWithOpp,renterNetWorth'); const n=series.rentCum.length; for(let i=0;i<n;i++) lines.push(`series,${i+1},${series.rentCum[i]},${series.rentCumAdj[i]},${series.ownerCum[i]},${series.ownerCumWithOpp[i]},${series.ownerNetWorth[i]},${series.ownerNetWorthWithOpp[i]},${series.renterNetWorth[i]}`); for(const [k,v] of Object.entries(horizon)) lines.push(`horizon,${k},${v}`); const csv=lines.join('\n'); const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='simulation_achat_vs_location_scenario_v3_1.csv'; a.click(); setTimeout(()=>URL.revokeObjectURL(url),5000) }
+    function exportCSV(){ if(!window.__exportData) return; const {inputs,series,horizon,breakdown}=window.__exportData; const lines=[];
+      lines.push('section,key,value');
+      for(const [k,v] of Object.entries(inputs)) lines.push(`inputs,${k},${v}`);
+      lines.push('series,year,rentCum,rentCumAdj,ownerCum,ownerCumWithOpp,ownerNetWorth,ownerNetWorthWithOpp,renterNetWorth');
+      const n=series.rentCum.length;
+      for(let i=0;i<n;i++) lines.push(`series,${i+1},${series.rentCum[i]},${series.rentCumAdj[i]},${series.ownerCum[i]},${series.ownerCumWithOpp[i]},${series.ownerNetWorth[i]},${series.ownerNetWorthWithOpp[i]},${series.renterNetWorth[i]}`);
+      for(const [k,v] of Object.entries(horizon)) lines.push(`horizon,${k},${v}`);
+      if(breakdown){
+        for(const role of ['owner','renter']){
+          const scope=breakdown[role]||{};
+          for(const [k,v] of Object.entries(scope)) lines.push(`breakdown_${role},${k},${v}`);
+        }
+      }
+      const csv=lines.join('\n');
+      const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a'); a.href=url; a.download='simulation_achat_vs_location_scenario_v3_1.csv'; a.click();
+      setTimeout(()=>URL.revokeObjectURL(url),5000);
+    }
+
 
     // --- Tests intégrés ---
     const approxEqual=(a,b,eps=2)=>Math.abs(a-b)<=eps;
