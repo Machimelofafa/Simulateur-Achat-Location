@@ -767,7 +767,19 @@
     }
 
     // init
-    defaults(); bind(); model();
+    document.addEventListener('DOMContentLoaded', ()=>{
+      try{
+        defaults();
+        bind();
+        model();
+      }catch(e){
+        el('err').textContent = e?.stack || String(e);
+      }
+      // petit « nudge » de sécurité après mise en page
+      setTimeout(()=>{
+        try{ model(); }catch(_){ }
+      }, 0);
+    });
   </script>
 </body>
 </html>
