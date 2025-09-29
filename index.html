@@ -442,7 +442,7 @@
         ownerCum.push(baseOwnerCashOut+extraCapex);
         ownerCumWithOpp.push(baseOwnerCashOut+extraCapex+foregoneDown+foregoneCapex);
 
-        const totalExpenses=down+notaryCost+paid.totalInterest+recCum[y-1]+extraCapex;
+        const totalExpenses=notaryCost+paid.totalInterest+recCum[y-1]+extraCapex;
         ownerWealth.push(salePrice-totalExpenses-paid.remaining);
       }
 
