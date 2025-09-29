@@ -128,8 +128,6 @@
             <label class="switch"><input id="toggleOpp" type="checkbox" checked> Inclure coût d'opportunité</label>
           </div>
           <div class="row" style="gap:16px">
-            <label class="switch" title="Si vous restez locataire, l'apport initial est placé au même taux."><input id="optRentInvestDown" type="checkbox"> Si location : investir l'apport</label>
-            <label class="switch" title="Si loyer < (mensualité + charges proprio mensuelles), le surplus mensuel est placé au même taux."><input id="optRentInvestDiff" type="checkbox"> Si location : investir le surplus mensuel</label>
           </div>
           <details style="margin-top:8px">
             <summary>ℹ️ Aide : comment est calculé le coût d'opportunité ?</summary>
@@ -389,7 +387,7 @@
     const sum=a=>a.reduce((x,y)=>x+y,0);
 
     function compute(params){
-      const {years,g,altReturn,includeOpp,surface,pricePerM2,down,rate,term,notaryPct,sellFeePct,coproPerM2,maintPct,tf,tfExemptYears=0,mrh,rentSmall,rentSmallYears,rentBig,irl,capexEvents=[],ptzAmount=0,ptzTerm=20,rentInvestDown=false,rentInvestDiff=false}=params;
+      const {years,g,altReturn,includeOpp,surface,pricePerM2,down,rate,term,notaryPct,sellFeePct,coproPerM2,maintPct,tf,tfExemptYears=0,mrh,rentSmall,rentSmallYears,rentBig,irl,capexEvents=[],ptzAmount=0,ptzTerm=20}=params;
       const price=surface*pricePerM2; const totalCost=price*(1+notaryPct);
       const loanMain=Math.max(0,totalCost-down-ptzAmount); const schedMain=amortSchedule(loanMain,rate,term);
       const schedPTZ=ptzAmount>0?amortSchedule(ptzAmount,0,ptzTerm):[];
@@ -398,6 +396,33 @@
       // recurring per year (TF exonéré X années)
       const recYear=y=>copro+maintenance+mrh+((y<=tfExemptYears)?0:tf);
       const recCum=[]; let rc=0; for(let y=1;y<=years;y++){rc+=recYear(y); recCum.push(rc)}
+
+      const altRateEff=includeOpp?altReturn:0;
+      const monthlyAltRate=altRateEff===0?0:Math.pow(1+altRateEff,1/12)-1;
+      const months=years*12;
+      const ownerMonthlyCosts=new Array(months).fill(0);
+      const rentMonthly=new Array(months).fill(0);
+      const capexMonthly=new Array(months).fill(0);
+      capexEvents.forEach(e=>{const year=Math.max(1,Math.floor(+e.year)); const cost=Math.max(0,+e.cost||0); if(year>=1&&year<=years&&cost>0){const idx=(year-1)*12; capexMonthly[idx]=(capexMonthly[idx]||0)+cost;}});
+      for(let m=1;m<=months;m++){
+        const y=Math.floor((m-1)/12)+1;
+        const mainPay=(m<=schedMain.length)?schedMain[m-1].pay:0;
+        const ptzPay=(m<=schedPTZ.length)?schedPTZ[m-1].pay:0;
+        const recurring=recYear(y)/12;
+        const capex=capexMonthly[m-1]||0;
+        ownerMonthlyCosts[m-1]=mainPay+ptzPay+recurring+capex;
+        const rentBase=(y<=rentSmallYears?rentSmall:rentBig)*Math.pow(1+irl,y-1);
+        rentMonthly[m-1]=rentBase;
+      }
+
+      const renterNetWorthSeries=new Array(years).fill(0);
+      let renterBalance=down;
+      for(let m=1;m<=months;m++){
+        renterBalance*=1+monthlyAltRate;
+        renterBalance+=ownerMonthlyCosts[m-1]-rentMonthly[m-1];
+        if(m%12===0) renterNetWorthSeries[m/12-1]=renterBalance;
+      }
+      if(years===0) renterBalance=down;
 
       function cumPaid(y){
         const upto=Math.min(y*12,schedMain.length); const s1=schedMain.slice(0,upto);
@@ -411,52 +436,36 @@
       const rentCum=[]; rentYears.reduce((acc,cur)=>{const v=acc+cur;rentCum.push(v);return v;},0);
 
       function capexUpTo(y){return capexEvents.filter(e=>e.year>=1&&e.year<=y).reduce((t,e)=>t+Math.max(0,+e.cost||0),0)}
-      function oppOnCapexTo(y){return capexEvents.filter(e=>e.year>=1&&e.year<=y).reduce((t,e)=>{const k=y-e.year;return t+Math.max(0,+e.cost||0)*(Math.pow(1+altReturn,Math.max(0,k))-1);},0)}
+      function oppOnCapexTo(y){return capexEvents.filter(e=>e.year>=1&&e.year<=y).reduce((t,e)=>{const k=y-e.year;return t+Math.max(0,+e.cost||0)*(Math.pow(1+altRateEff,Math.max(0,k))-1);},0)}
 
       // --- Opportunity on owner side (apport/capex) ---
       const ownerCum=[],ownerCumWithOpp=[];
+      const ownerNetWorth=[],ownerNetWorthWithOpp=[];
       for(let y=1;y<=years;y++){
         const {totalPaid,remaining}=cumPaid(y);
         const salePrice=price*Math.pow(1+g,y); const saleCosts=salePrice*sellFeePct; const netSale=salePrice-saleCosts-remaining;
         const baseOwnerCashOut=down+totalPaid+recCum[y-1]-netSale; const extraCapex=capexUpTo(y);
-        const foregoneDown=(includeOpp && !rentInvestDown)? down*(Math.pow(1+altReturn,y)-1) : 0; // if rentInvestDown, we don't count it here
+        const foregoneDown=(includeOpp)? down*(Math.pow(1+altRateEff,y)-1) : 0;
         const foregoneCapex=(includeOpp)? oppOnCapexTo(y):0;
         ownerCum.push(baseOwnerCashOut+extraCapex);
         ownerCumWithOpp.push(baseOwnerCashOut+extraCapex+foregoneDown+foregoneCapex);
+        const netWorth=netSale-(down+totalPaid+recCum[y-1]+extraCapex);
+        ownerNetWorth.push(netWorth);
+        ownerNetWorthWithOpp.push(netWorth-foregoneDown-foregoneCapex);
       }
 
       const last=cumPaid(years); const salePriceH=price*Math.pow(1+g,years); const saleCostsH=salePriceH*sellFeePct; const netSaleH=salePriceH-saleCostsH-last.remaining;
       const baseOwnerH=down+last.totalPaid+recCum[years-1]-netSaleH; const capexH=capexUpTo(years);
-      const foregoneDownH=(includeOpp && !rentInvestDown)? down*(Math.pow(1+altReturn,years)-1):0; const foregoneCapexH=(includeOpp)? oppOnCapexTo(years):0;
+      const foregoneDownH=(includeOpp)? down*(Math.pow(1+altRateEff,years)-1):0; const foregoneCapexH=(includeOpp)? oppOnCapexTo(years):0;
       const ownerCashH=baseOwnerH+capexH; const ownerCashHOpp=ownerCashH+foregoneDownH+foregoneCapexH;
 
-      // --- Renter-side investing options (apport / monthly surplus) ---
-      const rentCumAdj=[...rentCum];
-      let renterFVDownByYear = new Array(years).fill(0);
-      if(includeOpp && rentInvestDown){ for(let y=1;y<=years;y++){ renterFVDownByYear[y-1]= down*(Math.pow(1+altReturn,y)-1); } }
+      const renterNetWorth=renterNetWorthSeries[years-1]||down;
+      const rentCumAdj=rentCum.map((v,idx)=> v - ((renterNetWorthSeries[idx]||down)-down));
 
-      let renterFVSurplusByYear = new Array(years).fill(0);
-      if(includeOpp && rentInvestDiff){
-        const rm = altReturn/12; const months = years*12; const sMonthly = new Array(months).fill(0);
-        for(let m=1;m<=months;m++){
-          const y = Math.floor((m-1)/12)+1; // year index starting at 1
-          const rentM = ((y<=rentSmallYears?rentSmall:rentBig)*Math.pow(1+irl,y-1));
-          const ownerM = monthly + recYear(y)/12; // monthly owner cash cost approximation
-          const surplus = Math.max(0, ownerM - rentM);
-          sMonthly[m-1] = surplus;
-        }
-        // For each year y, compute FV at year-end of all deposits up to that month
-        for(let y=1;y<=years;y++){
-          const endM = y*12; let FV = 0; for(let m=1;m<=endM;m++){ FV += sMonthly[m-1]*Math.pow(1+rm, endM - m); } renterFVSurplusByYear[y-1]=FV; }
-      }
+      const renterCashH=sum(rentYears);
+      let beYear=null; const ownerSeriesUse=includeOpp?ownerCumWithOpp:ownerCum; const rentSeriesUse=(includeOpp?rentCumAdj:rentCum); for(let i=0;i<years;i++){ if(ownerSeriesUse[i]<=rentSeriesUse[i]){ beYear=i+1; break; } }
 
-      // Adjust rent curve if options active
-      const rentCumFinal = rentCum.map((v,idx)=> v - (renterFVDownByYear[idx]||0) - (renterFVSurplusByYear[idx]||0));
-
-      const renterCashH=sum(rentYears); const renterBenefitDown = renterFVDownByYear[years-1]||0; const renterBenefitSurp = renterFVSurplusByYear[years-1]||0;
-      let beYear=null; const ownerSeriesUse=includeOpp?ownerCumWithOpp:ownerCum; const rentSeriesUse=(includeOpp?rentCumFinal:rentCum); for(let i=0;i<years;i++){ if(ownerSeriesUse[i]<=rentSeriesUse[i]){ beYear=i+1; break; } }
-
-      return{series:{rentCum,ownerCum,ownerCumWithOpp,rentCumAdj:rentCumFinal},horizon:{monthly,ownerCashH,ownerCashHOpp,renterCashH,totalInterest:last.totalInterest,totalPrincipal:last.totalPrincipal,remaining:last.remaining,netSaleH,beYear,capexH,foregoneDownH,foregoneCapexH,renterBenefitDown,renterBenefitSurp,ptzPayMonthly:(schedPTZ[0]?schedPTZ[0].pay:0)},derived:{price,totalCost,loan:loanMain+ptzAmount,recurringY1:recYear(1)}};
+      return{series:{rentCum,ownerCum,ownerCumWithOpp,rentCumAdj,ownerNetWorth,ownerNetWorthWithOpp,renterNetWorth:renterNetWorthSeries},horizon:{monthly,ownerCashH,ownerCashHOpp,renterCashH,totalInterest:last.totalInterest,totalPrincipal:last.totalPrincipal,remaining:last.remaining,netSaleH,beYear,capexH,foregoneDownH,foregoneCapexH,renterNetWorth,ownerNetWorth:ownerNetWorth[ownerNetWorth.length-1]||0,ownerNetWorthWithOpp:ownerNetWorthWithOpp[ownerNetWorthWithOpp.length-1]||0,ptzPayMonthly:(schedPTZ[0]?schedPTZ[0].pay:0)},derived:{price,totalCost,loan:loanMain+ptzAmount,recurringY1:recYear(1)}};
     }
 
     const el=id=>document.getElementById(id);
@@ -465,7 +474,7 @@
     function readInputs(){
       const years=+el('years').value; const growthSel=el('priceGrowth').value; let g=0; g=(growthSel==='custom')?(+el('customGrowth').value)/100:+growthSel; const includeOpp=el('toggleOpp').checked; const altReturn=+el('altReturn').value/100; const scenario=el('scenario').value; 
       const surface=(scenario==='neuf')? +el('surfaceNeuf').value : +el('surface').value; const pricePerM2=(scenario==='neuf')? +el('pricePerM2Neuf').value : +el('pricePerM2').value;
-      const down=+el('downPayment').value; const rate=+el('rate').value; const term=+el('term').value; const notaryPct=+el('notary').value/100; const sellFeePct=+el('sellFee').value/100; const coproPerM2=+el('coproPerM2').value; const maintPct=+el('maintPct').value/100; const tf=+el('tf').value; const mrh=+el('mrh').value; const tfExemptYears=(scenario==='neuf')? +el('tfExempt').value : 0; const rentSmall=+el('rentSmall').value; const rentSmallYears=+el('rentSmallYears').value; const rentBig=+el('rentBig').value; const irl=+el('irl').value/100; const incomeNet=+el('incomeNet').value; const otherDebt=+el('otherDebt').value; const ptzAmount=(scenario==='neuf')? +el('ptzAmount').value:0; const ptzTerm=(scenario==='neuf')? +el('ptzTerm').value:20; const capexAnc=readCapex('capexAnc'); const capexNeuf=readCapex('capexNeuf'); const capexEvents=(scenario==='neuf')?capexNeuf:capexAnc; const rentInvestDown=el('optRentInvestDown').checked; const rentInvestDiff=el('optRentInvestDiff').checked; return{years,g,altReturn,includeOpp,surface,pricePerM2,down,rate,term,notaryPct,sellFeePct,coproPerM2,maintPct,tf,tfExemptYears,mrh,rentSmall,rentSmallYears,rentBig,irl,incomeNet,otherDebt,scenario,capexEvents,ptzAmount,ptzTerm,rentInvestDown,rentInvestDiff}
+      const down=+el('downPayment').value; const rate=+el('rate').value; const term=+el('term').value; const notaryPct=+el('notary').value/100; const sellFeePct=+el('sellFee').value/100; const coproPerM2=+el('coproPerM2').value; const maintPct=+el('maintPct').value/100; const tf=+el('tf').value; const mrh=+el('mrh').value; const tfExemptYears=(scenario==='neuf')? +el('tfExempt').value : 0; const rentSmall=+el('rentSmall').value; const rentSmallYears=+el('rentSmallYears').value; const rentBig=+el('rentBig').value; const irl=+el('irl').value/100; const incomeNet=+el('incomeNet').value; const otherDebt=+el('otherDebt').value; const ptzAmount=(scenario==='neuf')? +el('ptzAmount').value:0; const ptzTerm=(scenario==='neuf')? +el('ptzTerm').value:20; const capexAnc=readCapex('capexAnc'); const capexNeuf=readCapex('capexNeuf'); const capexEvents=(scenario==='neuf')?capexNeuf:capexAnc; return{years,g,altReturn,includeOpp,surface,pricePerM2,down,rate,term,notaryPct,sellFeePct,coproPerM2,maintPct,tf,tfExemptYears,mrh,rentSmall,rentSmallYears,rentBig,irl,incomeNet,otherDebt,scenario,capexEvents,ptzAmount,ptzTerm}
     }
 
     function model(){
@@ -480,7 +489,10 @@
         let dtiTxt='—',dtiClass=''; if(p.incomeNet>0){const dti=(out.horizon.monthly+p.otherDebt)/p.incomeNet; dtiTxt=fmtPCT.format(dti); if(dti<=0.35)dtiClass='tag-ok'; else if(dti<=0.4)dtiClass='tag-warn'; else dtiClass='tag-bad';} const kDTI=el('kDTI'); kDTI.textContent=dtiTxt; kDTI.className='k '+dtiClass;
         const growthPct=(readInputs().g*100).toFixed(1).replace('.',','); el('tagGrowth').textContent=`Scénario prix: ${growthPct} %/an`; el('tagOpp').textContent=p.includeOpp?'Avec coût d\'opportunité':'Sans coût d\'opportunité'; el('tagBE').textContent=`Break-even: ${out.horizon.beYear?('année '+out.horizon.beYear):'—'}`; el('tagScenario').textContent=(p.scenario==='neuf')?'Neuf':'Ancien';
         const d=out.derived,h=out.horizon; const details=[["Prix d\'achat",fmtEUR.format(d.price)],["Frais d\'acquisition",fmtEUR.format(d.price*(readInputs().notaryPct))],["Coût total (prix+frais)",fmtEUR.format(d.totalCost)],["Apport",fmtEUR.format(readInputs().down)],["Emprunt (total)",fmtEUR.format(d.loan)],["Mensualité PTZ (si >0)",fmtEUR.format(h.ptzPayMonthly)],["Intérêts payés (horizon)",fmtEUR.format(h.totalInterest)],["Capital remboursé (horizon)",fmtEUR.format(h.totalPrincipal)],["Solde restant dû (horizon)",fmtEUR.format(h.remaining)],["Coûts récurrents/an Y1 (copro+entretien+TF+MRH)",fmtEUR.format(d.recurringY1)],["Produit net de vente (horizon)",fmtEUR.format(h.netSaleH)],["Travaux extraordinaires (cumul horizon)",fmtEUR.format(h.capexH)]];
-        if(p.includeOpp){ if(p.rentInvestDown) details.push(["Bénéfice locataire – apport placé", fmtEUR.format(h.renterBenefitDown)]); if(p.rentInvestDiff) details.push(["Bénéfice locataire – surplus placé", fmtEUR.format(h.renterBenefitSurp)]); details.push(["Manque à gagner propriétaire – apport/capex", fmtEUR.format(h.foregoneDownH + h.foregoneCapexH)]); }
+        if(p.includeOpp){ details.push(["Manque à gagner propriétaire – apport/capex", fmtEUR.format(h.foregoneDownH + h.foregoneCapexH)]); }
+        details.push(["Patrimoine net propriétaire (cash)", fmtEUR.format(h.ownerNetWorth)]);
+        if(p.includeOpp) details.push(["Patrimoine net propriétaire (avec opportunité)", fmtEUR.format(h.ownerNetWorthWithOpp)]);
+        details.push(["Patrimoine net locataire", fmtEUR.format(h.renterNetWorth)]);
         details.push([p.includeOpp?"Coût total propriétaire (avec opportunité)":"Coût total propriétaire (cash)",fmtEUR.format(ownerDisplay)]); details.push([p.includeOpp?"Coût total locataire (net placements)":"Coût total locataire (loyers)",fmtEUR.format(renterDisplay)]); details.push(["Écart Achat − Location",(delta>=0?'+':'')+fmtEUR.format(delta)]);
         const tblD=el('tblDetails'); tblD.innerHTML='<tr><th>Poste</th><th>Montant</th></tr>'+details.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('');
         const rentCum=p.includeOpp?out.series.rentCumAdj:out.series.rentCum, ownerCash=out.series.ownerCum, ownerOpp=out.series.ownerCumWithOpp; const tblY=el('tblYears'); const header='<tr><th>Année</th><th>Coût locataire cumulé</th><th>Propriétaire cumulé (cash)</th><th>Propriétaire cumulé (opportunité)</th></tr>'; const rows=[]; for(let y=1;y<=p.years;y++){rows.push(`<tr><td>${y}</td><td>${fmtEUR.format(rentCum[y-1])}</td><td>${fmtEUR.format(ownerCash[y-1])}</td><td>${fmtEUR.format(ownerOpp[y-1])}</td></tr>`)} tblY.innerHTML=header+rows.join('');
@@ -565,7 +577,7 @@
     }
 
     function bind(){
-      const ids=['scenario','years','priceGrowth','customGrowth','toggleOpp','altReturn','ancArea','neufArea','surface','surfaceNeuf','pricePerM2','pricePerM2Neuf','downPayment','rate','term','notary','sellFee','incomeNet','otherDebt','coproPerM2','maintPct','tf','tfExempt','mrh','rentSmall','rentSmallYears','rentBig','irl','ptzAmount','ptzTerm','optRentInvestDown','optRentInvestDiff']; ids.forEach(id=>el(id).addEventListener('input',model));
+      const ids=['scenario','years','priceGrowth','customGrowth','toggleOpp','altReturn','ancArea','neufArea','surface','surfaceNeuf','pricePerM2','pricePerM2Neuf','downPayment','rate','term','notary','sellFee','incomeNet','otherDebt','coproPerM2','maintPct','tf','tfExempt','mrh','rentSmall','rentSmallYears','rentBig','irl','ptzAmount','ptzTerm']; ids.forEach(id=>el(id).addEventListener('input',model));
       el('scenario').addEventListener('change', updateScenarioUI);
       el('priceGrowth').addEventListener('change',e=>{const v=e.target.value; const row=el('customGrowthRow'); row.style.display=(v==='custom')?'grid':'none'; model()});
       el('btnReset').addEventListener('click',()=>{defaults(); model()});
@@ -583,13 +595,12 @@
       el('incomeNet').value=7150; el('otherDebt').value=0;
       el('coproPerM2').value=43.34; el('maintPct').value=0.5; el('tf').value=1300; el('mrh').value=200; el('tfExempt').value=0;
       el('ptzAmount').value=0; el('ptzTerm').value=20; 
-      el('optRentInvestDown').checked=false; el('optRentInvestDiff').checked=false;
       el('rentSmall').value=1690; el('rentSmallYears').value=2; el('rentBig').value=2000; el('irl').value=1.2; el('customGrowthRow').style.display='none';
       el('capexAnc').innerHTML=''; el('capexNeuf').innerHTML=''; addCapexRow('capexAnc', 7, 12000);
       applyAncPreset(); applyNeufPreset(); updateScenarioUI();
     }
 
-    function exportCSV(){ if(!window.__exportData) return; const {inputs,series,horizon}=window.__exportData; const lines=[]; lines.push('section,key,value'); for(const [k,v] of Object.entries(inputs)) lines.push(`inputs,${k},${v}`); lines.push('series,year,rentCum,ownerCum,ownerCumWithOpp,rentCumAdj'); const n=series.rentCum.length; for(let i=0;i<n;i++) lines.push(`series,${i+1},${series.rentCum[i]},${series.ownerCum[i]},${series.ownerCumWithOpp[i]},${series.rentCumAdj[i]}`); for(const [k,v] of Object.entries(horizon)) lines.push(`horizon,${k},${v}`); const csv=lines.join('\n'); const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='simulation_achat_vs_location_scenario_v3_1.csv'; a.click(); setTimeout(()=>URL.revokeObjectURL(url),5000) }
+    function exportCSV(){ if(!window.__exportData) return; const {inputs,series,horizon}=window.__exportData; const lines=[]; lines.push('section,key,value'); for(const [k,v] of Object.entries(inputs)) lines.push(`inputs,${k},${v}`); lines.push('series,year,rentCum,rentCumAdj,ownerCum,ownerCumWithOpp,ownerNetWorth,ownerNetWorthWithOpp,renterNetWorth'); const n=series.rentCum.length; for(let i=0;i<n;i++) lines.push(`series,${i+1},${series.rentCum[i]},${series.rentCumAdj[i]},${series.ownerCum[i]},${series.ownerCumWithOpp[i]},${series.ownerNetWorth[i]},${series.ownerNetWorthWithOpp[i]},${series.renterNetWorth[i]}`); for(const [k,v] of Object.entries(horizon)) lines.push(`horizon,${k},${v}`); const csv=lines.join('\n'); const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='simulation_achat_vs_location_scenario_v3_1.csv'; a.click(); setTimeout(()=>URL.revokeObjectURL(url),5000) }
 
     // --- Tests intégrés ---
     const approxEqual=(a,b,eps=2)=>Math.abs(a-b)<=eps;
@@ -606,16 +617,15 @@
       const withCapex=compute({...paramsIRL, years:5, capexEvents:[{year:3, cost:10000}]});
       (withCapex.series.ownerCum[2] >= base.series.ownerCum[2] + 10000 - 1 ? pass : fail)(`Capex Y3 +10k impact année 3`);
       const mTest=pmt(100000,3,25); const dti=(mTest+126)/2000; (approxEqual(dti*100,30,2)?pass:fail)(`DTI ~30% → ${(dti*100).toFixed(1)}%`);
-      const oppCase=compute({...paramsIRL,years:5}); (oppCase.horizon.ownerCashHOpp>=oppCase.horizon.ownerCashH?pass:fail)(`Owner(opp) ≥ Owner(cash)`);
-      const downOwnerOnly=compute({...paramsIRL, years:10, includeOpp:true, rentInvestDown:false});
-      const downRenter=compute({...paramsIRL, years:10, includeOpp:true, rentInvestDown:true});
-      const gainDown = 200000*(Math.pow(1+0.03,10)-1);
-      // Quand on passe en mode locataire pour l'apport, la courbe locataire ajustée baisse d'environ le même gain, et le manque à gagner proprio disparaît
-      ((Math.abs((downRenter.series.rentCumAdj[9]-downRenter.series.rentCum[9]) + gainDown) < 200) ? pass : fail)(`Apport investi côté locataire (~gainDown)`);
-      ((Math.abs(downRenter.horizon.foregoneDownH) < 1) ? pass : fail)(`Pas de manque à gagner sur apport côté propriétaire quand 'investir apport' est activé`);
-      // Surplus investi: si le loyer est très bas, la courbe locataire doit baisser avec l'option
-      const cheapRent=compute({...paramsIRL, years:3, includeOpp:true, rentInvestDiff:true, rentSmall:500, rentBig:500});
-      (cheapRent.series.rentCumAdj[2] < cheapRent.series.rentCum[2] ? pass : fail)(`Surplus mensuel investi réduit le coût locataire`);
+      const oppCase=compute({...paramsIRL,years:5,includeOpp:true}); (oppCase.horizon.ownerCashHOpp>=oppCase.horizon.ownerCashH?pass:fail)(`Owner(opp) ≥ Owner(cash)`);
+      (approxEqual(base.series.ownerNetWorth[4], -base.series.ownerCum[4], 2)?pass:fail)(`Patrimoine propriétaire cohérent (cash)`);
+      (approxEqual(oppCase.series.ownerNetWorthWithOpp[4], -oppCase.series.ownerCumWithOpp[4], 2)?pass:fail)(`Patrimoine propriétaire cohérent (opportunité)`);
+      const rentAdjCalc=base.series.rentCum[4] - (base.series.renterNetWorth[4] - paramsIRL.down);
+      (approxEqual(base.series.rentCumAdj[4], rentAdjCalc, 2)?pass:fail)(`Coût locataire ajusté = loyers − gains`);
+      const investParams={years:3,g:0,altReturn:0.03,includeOpp:true,surface:1,pricePerM2:1000,down:1000,rate:0,term:1,notaryPct:0,sellFeePct:0,coproPerM2:0,maintPct:0,tf:0,tfExemptYears:0,mrh:0,rentSmall:0,rentSmallYears:3,rentBig:0,irl:0,capexEvents:[],ptzAmount:0,ptzTerm:20};
+      const investOut=compute(investParams); const expectedInvest=investParams.down*Math.pow(1+investParams.altReturn,investParams.years);
+      (approxEqual(investOut.series.renterNetWorth[2], expectedInvest, 1)?pass:fail)(`Apport placé compense au taux attendu`);
+      (approxEqual(investOut.horizon.ownerNetWorth,0,1)?pass:fail)(`Patrimoine propriétaire neutre quand flux nuls`);
 
       document.getElementById('testLog').textContent=log.join('\n'); const ok=log.every(l=>l.startsWith('✅')); document.getElementById('testStatus').textContent=ok?'Tous les tests passent':'Échecs dans les tests'; document.getElementById('testStatus').className=ok?'test-ok':'test-bad';
     }
