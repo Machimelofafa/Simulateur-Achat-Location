@@ -330,6 +330,7 @@
   <script>
     // Formatting
     const fmtEUR = new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR',maximumFractionDigits:0});
+    const fmtDelta=v=>v>0?`+${fmtEUR.format(v)}`:fmtEUR.format(v);
     const fmtPCT = new Intl.NumberFormat('fr-FR',{style:'percent',minimumFractionDigits:0,maximumFractionDigits:1});
 
     // === Presets quartiers (Ancien) – valeurs indicatives ===
@@ -522,7 +523,7 @@
         const renterWealth=out.horizon.renterNetWorth;
         el('kOwner10').textContent=fmtEUR.format(ownerWealth);
         el('kRenter10').textContent=fmtEUR.format(renterWealth);
-        const delta=ownerWealth-renterWealth; const kDelta=el('kDelta'); kDelta.textContent=(delta>=0?'+':'')+fmtEUR.format(delta); kDelta.style.color=delta>=0?'var(--ok)':'var(--bad)';
+        const delta=ownerWealth-renterWealth; const kDelta=el('kDelta'); kDelta.textContent=fmtDelta(delta); kDelta.style.color=delta>=0?'var(--ok)':'var(--bad)';
         let dtiTxt='—',dtiClass=''; if(p.incomeNet>0){const dti=(out.horizon.monthly+p.otherDebt)/p.incomeNet; dtiTxt=fmtPCT.format(dti); if(dti<=0.35)dtiClass='tag-ok'; else if(dti<=0.4)dtiClass='tag-warn'; else dtiClass='tag-bad';} const kDTI=el('kDTI'); kDTI.textContent=dtiTxt; kDTI.className='k '+dtiClass;
         const growthPct=(p.g*100).toFixed(1).replace('.',','); el('tagGrowth').textContent=`Prix logement: ${growthPct} %/an`; const altLabel=fmtPCT.format(p.altReturn); el('tagOpp').textContent=p.includeOpp?`Placement alternatif activé (${altLabel}/an)`: `Placement alternatif inactif (${altLabel}/an)`; el('tagBE').textContent=`Parité patrimoine: ${out.horizon.beWealthYear?('année '+out.horizon.beWealthYear):'—'}`; el('tagScenario').textContent=(p.scenario==='neuf')?'Neuf':'Ancien';
         const b=out.breakdown; const ownerTitle=p.includeOpp?'Patrimoine final – Achat (avec opportunité)':'Patrimoine final – Achat'; const renterTitle='Patrimoine final – Location'; const ownerRows=[
@@ -549,11 +550,11 @@
         renterRows.push(['Contribution nette (après retraits)',fmtEUR.format(b.renter.netContribution)]);
         renterRows.push(['Taux de placement retenu',fmtPCT.format(b.renter.altReturn)]);
         renterRows.push([renterTitle,fmtEUR.format(renterWealth)]);
-        renterRows.push(['Écart de patrimoine (Achat − Location)',(delta>=0?'+':'')+fmtEUR.format(delta)]);
+        renterRows.push(['Écart de patrimoine (Achat − Location)',fmtDelta(delta)]);
         const tblD=el('tblDetails');
         const allRows=['<tr><th>Poste</th><th>Montant</th></tr>','<tr><th colspan="2">Propriétaire</th></tr>',...ownerRows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`),'<tr><th colspan="2">Locataire</th></tr>',...renterRows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`)];
         tblD.innerHTML=allRows.join('');
-        const ownerSeriesNet=p.includeOpp?out.series.ownerNetWorthWithOpp:out.series.ownerNetWorth; const renterSeries=out.series.renterNetWorth; const tblY=el('tblYears'); const header='<tr><th>Année</th><th>Patrimoine locataire</th><th>Patrimoine propriétaire</th><th>Écart (Achat − Location)</th></tr>'; const rows=[]; for(let y=1;y<=p.years;y++){const ownerVal=ownerSeriesNet[y-1]; const renterVal=renterSeries[y-1]; const deltaYear=ownerVal-renterVal; rows.push(`<tr><td>${y}</td><td>${fmtEUR.format(renterVal)}</td><td>${fmtEUR.format(ownerVal)}</td><td>${(deltaYear>=0?'+':'')+fmtEUR.format(deltaYear)}</td></tr>`);} tblY.innerHTML=header+rows.join('');
+        const ownerSeriesNet=p.includeOpp?out.series.ownerNetWorthWithOpp:out.series.ownerNetWorth; const renterSeries=out.series.renterNetWorth; const tblY=el('tblYears'); const header='<tr><th>Année</th><th>Patrimoine locataire</th><th>Patrimoine propriétaire</th><th>Écart (Achat − Location)</th></tr>'; const rows=[]; for(let y=1;y<=p.years;y++){const ownerVal=ownerSeriesNet[y-1]; const renterVal=renterSeries[y-1]; const deltaYear=ownerVal-renterVal; rows.push(`<tr><td>${y}</td><td>${fmtEUR.format(renterVal)}</td><td>${fmtEUR.format(ownerVal)}</td><td>${fmtDelta(deltaYear)}</td></tr>`);} tblY.innerHTML=header+rows.join('');
         drawChart(ownerSeriesNet,renterSeries);
         window.__exportData={inputs:p,series:out.series,horizon:{...out.horizon,delta},breakdown:out.breakdown}; el('err').textContent='';
       }catch(e){el('err').textContent=(e&&e.stack)?e.stack:String(e);console.error(e)}
