@@ -564,9 +564,20 @@
 
     function drawChart(seriesOwner,seriesRenter){
       const canvas=el('chart'); const ctx=canvas.getContext('2d'); const W=canvas.width,H=canvas.height; ctx.clearRect(0,0,W,H);
-      const pad={l:64,r:20,t:22,b:56}; const n=Math.max(seriesOwner.length,seriesRenter.length); const xStep=(W-pad.l-pad.r)/Math.max(1,(n-1));
-      const combined=[...seriesOwner,...seriesRenter,0];
+
+      // Garde-fous: listes vides → rien à tracer mais pas d'erreur
+      if(!Array.isArray(seriesOwner) || !Array.isArray(seriesRenter) ||
+         seriesOwner.length===0 || seriesRenter.length===0){
+        return;
+      }
+      // Filtrer les NaN
+      const sO=seriesOwner.map(v=>Number.isFinite(v)?v:0);
+      const sR=seriesRenter.map(v=>Number.isFinite(v)?v:0);
+
+      const pad={l:64,r:20,t:22,b:56}; const n=Math.max(sO.length,sR.length); const xStep=(W-pad.l-pad.r)/Math.max(1,(n-1));
+      const combined=[...sO,...sR,0].filter(Number.isFinite);
       let maxV=Math.max(...combined); let minV=Math.min(...combined);
+      if(!Number.isFinite(maxV) || !Number.isFinite(minV)){ maxV=1; minV=0; }
       if(maxV===minV){maxV+=1; minV-=1;}
       const range=maxV-minV;
 
@@ -598,8 +609,8 @@
       // series
       const colA = '#16a34a'; // renter
       const colB = '#2563eb'; // owner
-      line(seriesRenter,colA); dots(seriesRenter,colA);
-      line(seriesOwner,colB); dots(seriesOwner,colB);
+      line(sR,colA); dots(sR,colA);
+      line(sO,colB); dots(sO,colB);
 
       if(minV<0 && maxV>0){const yZero=yScale(0); ctx.strokeStyle='rgba(15,23,42,.25)'; ctx.beginPath(); ctx.moveTo(pad.l,yZero); ctx.lineTo(W-pad.r,yZero); ctx.stroke();}
 
